@@ -18,7 +18,7 @@ export function initialState(m: Mechanism): State {
   return { q, v: new Float64Array(3 * n) };
 }
 
-function solve(A: Float64Array[], b: Float64Array): Float64Array {
+export function solve(A: Float64Array[], b: Float64Array): Float64Array {
   const n = b.length;
   for (let c = 0; c < n; c++) {
     let p = c;

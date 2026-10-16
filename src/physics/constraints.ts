@@ -64,7 +64,7 @@ function pointPair(s: State, j: Extract<Joint, { pb: Vec }>, n: number, dirs: Ve
 }
 
 // drum radius and unwound rope at rotation φ (rope runs out at the end of the spiral: r stays r1, ponytail)
-export function camRope(j: Cam, phi: number) {
+export function camRope(j: Pick<Cam, 'r0' | 'r1' | 'span'>, phi: number) {
   if (phi <= 0) return { r: j.r0, F: j.r0 * phi, dr: 0 };
   const k = (j.r1 - j.r0) / j.span;
   if (phi >= j.span) return { r: j.r1, F: j.span * (j.r0 + j.r1) / 2 + j.r1 * (phi - j.span), dr: 0 };
