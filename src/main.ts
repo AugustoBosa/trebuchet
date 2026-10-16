@@ -7,6 +7,9 @@ import { initialState, simulate, type Result } from './physics/solver';
 import { build, defaults, defaultsFor, geometry, KINDS, type Kind, type Params } from './presets';
 import { drawFlight, drawMachine, type Bounds, type View } from './render';
 import type { View3d } from './render3d';
+import { apply3d, lift } from './physics3d/lift';
+import type { Mechanism3 } from './physics3d/model3';
+import { initialState3, simulate3, type Result3 } from './physics3d/solver3';
 import { compile, emptySketch, toSketch } from './sketch';
 import { deleteDesign, download, importFile, listDesigns, loadCurrent, saveCurrent, saveDesign, type Design } from './storage';
 
@@ -78,9 +81,10 @@ function mechanismOrError(): Mechanism | undefined {
 // kJ for full-size machines, J for tabletop ones
 const joules = (j: number) => (Math.abs(j) < 1000 ? `${j.toFixed(1)} J` : `${(j / 1000).toFixed(2)} kJ`);
 
-function stats(r: Result, m: Mechanism) {
+function stats(r: Result, m: Mechanism, lateral?: number) {
   const items: [string, string][] = [
     ['Alcance', `${r.range.toFixed(1)} m`],
+    ...(lateral === undefined ? [] : [['Desvio lateral', `${lateral.toFixed(2)} m`] as [string, string]]),
     ['Eficiência', r.inputEnergy > 0 ? `${(r.efficiency * 100).toFixed(1)} %` : '—'],
     ['Velocidade de saída', `${r.release?.speed.toFixed(1) ?? '—'} m/s`],
     ['Ângulo / altura de saída', r.release ? `${((r.release.angle * 180) / Math.PI).toFixed(0)}° / ${r.release.p[1].toFixed(1)} m` : '—'],
@@ -145,9 +149,21 @@ function dataTable(specs: ChartSpec[]) {
 
 const chartEls = ['chart-energy', 'chart-speed', 'chart-force'].map((id) => $<HTMLCanvasElement>(id));
 let raf = 0;
-let current: { m: Mechanism; r: Result; b: Bounds; specs: ChartSpec[] } | undefined;
+// 3D view: the shot comes from the 3D solver (m3, r3); r is its planar shadow for the stats and charts
+let current: { m: Mechanism; r: Result; b: Bounds; specs: ChartSpec[]; m3?: Mechanism3; r3?: Result3 } | undefined;
 let lastT = 0;
 
+const is3d = () => !!view3d && !machine3d.hidden;
+const mechanism3 = (m: Mechanism) => apply3d(lift(m), { windZ: +$<HTMLInputElement>('wind').value || 0, pinOffset: (+$<HTMLInputElement>('pin').value || 0) / 100 });
+const still3 = (m3: Mechanism3): Result3 => ({
+  frames: [{ t: 0, ...initialState3(m3), ke: 0, pe: 0, kes: [], forces: [], speed: 0 }],
+  flight: [], range: 0, lateral: 0, efficiency: 0, inputEnergy: 0, peakForce: [], dissipated: 0,
+});
+const planar = (r: Result3): Result => ({
+  ...r,
+  release: r.release && { ...r.release, p: [r.release.p[0], r.release.p[1]], v: [r.release.v[0], r.release.v[1]] },
+  flight: r.flight.map((p) => [p[0], p[1]]),
+});
 const stillResult = (m: Mechanism): Result => ({
   frames: [{ t: 0, q: initialState(m).q, ke: 0, pe: 0, kes: [], forces: [], speed: 0 }],
   flight: [], range: 0, efficiency: 0, inputEnergy: 0, peakForce: [], dissipated: 0,
@@ -161,18 +177,19 @@ $('view3d').addEventListener('click', async (e) => {
   view3d ??= (await import('./render3d')).createView3d(machine3d);
   btn.setAttribute('aria-pressed', String(on));
   machine.hidden = on;
-  machine3d.hidden = !on;
-  if (current && machine.dataset.mode === 'play') drawAt(lastT);
+  machine3d.hidden = $('opts3d').hidden = !on;
+  if (current && machine.dataset.mode === 'play') run(); // re-simulate with the other solver
   else preview();
 });
+for (const id of ['wind', 'pin']) $(id).addEventListener('change', () => (current && machine.dataset.mode === 'play' ? run() : preview()));
 
 
 function drawAt(t: number) {
   if (!current) return;
   lastT = t;
-  const { m, r, b, specs } = current;
+  const { m, r, b, specs, m3, r3 } = current;
   machine.dataset.mode = 'play';
-  if (view3d && !machine3d.hidden) view3d.draw(m, r, t, b);
+  if (view3d && m3 && r3) view3d.draw(m3, r3, t, b);
   else drawMachine(machine, m, r, t, b);
   drawFlight($('flight'), r, t, b.x0);
   specs.forEach((s, i) => drawChart(chartEls[i], s, Math.min(t, s.t.at(-1)!)));
@@ -207,9 +224,12 @@ function handles(m: Mechanism): Handle[] {
 // static cocked pose (no simulation): free mode shows the editor, presets show draggable handles
 function preview() {
   cancelAnimationFrame(raf);
-  if (view3d && !machine3d.hidden) { // 3D: still cocked pose, no handles (editing stays in 2D)
+  if (view3d && is3d()) { // 3D: still cocked pose, no handles (editing stays in 2D)
     const m = mechanismOrError();
-    if (m) view3d.draw(m, stillResult(m), 0, bounds());
+    if (m) {
+      const m3 = mechanism3(m);
+      view3d.draw(m3, still3(m3), 0, bounds());
+    }
     return;
   }
   if (isFree()) {
@@ -275,11 +295,13 @@ function run() {
     return;
   }
   saveCurrent(design());
-  const r = simulate(m, { afterRelease: 1.5 });
+  const m3 = is3d() ? mechanism3(m) : undefined;
+  const r3 = m3 && simulate3(m3, { afterRelease: 1.5 });
+  const r = r3 ? planar(r3) : simulate(m, { afterRelease: 1.5 });
   if (r.error) $('err').textContent = r.error;
-  stats(r, m);
+  stats(r, m, r3?.lateral);
   physicsPanel(r, m);
-  current = { m, r, b: bounds(), specs: chartSpecs(r, m) };
+  current = { m, r, b: bounds(), specs: chartSpecs(r, m), m3, r3 };
   dataTable(current.specs);
   const flightTime = r.release ? r.release.t + (r.flight.length - 1) * 1e-3 : r.frames.at(-1)!.t;
   const speed = Number($<HTMLSelectElement>('speed').value);

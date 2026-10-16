@@ -81,6 +81,10 @@
     #opt-result td:first-child, #opt-result th:first-child { text-align: left; }
     #sweep { cursor: pointer; }
     #machine[data-mode], #machine3d { touch-action: none; }
+    #view-row { align-items: center; flex-wrap: wrap; }
+    #opts3d { display: flex; gap: 12px; flex-wrap: wrap; }
+    #opts3d[hidden] { display: none; }
+    #opts3d label { grid-template-columns: auto 64px; margin: 0; }
     #view3d[aria-pressed=true] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
     #machine[data-mode=edit] { cursor: crosshair; }
     #machine[data-mode=handles] { cursor: grab; }
@@ -197,7 +201,11 @@
       </fieldset>
     </aside>
     <section>
-      <div class="row" id="view-row"><button class="ghost" id="view3d" aria-pressed="false" title="Alterna entre o desenho 2D e a vista 3D (arraste para girar, roda do mouse para zoom)">Vista 3D</button></div>
+      <div class="row" id="view-row"><button class="ghost" id="view3d" aria-pressed="false" title="Alterna entre o desenho 2D e a vista 3D (arraste para girar, roda do mouse para zoom)">Vista 3D</button>
+        <span id="opts3d" hidden>
+          <label title="Vento soprando de lado (positivo = para a esquerda de quem olha o alvo). Empurra o projétil no voo e durante o giro."><span>Vento lateral (m/s)</span><input type="number" id="wind" aria-label="Vento lateral em metros por segundo" value="0" step="1" min="-20" max="20"></label>
+          <label title="Pino de soltura montado fora da linha central do braço: a funda puxa a pedra de lado e o tiro desvia."><span>Pino fora do centro (cm)</span><input type="number" id="pin" aria-label="Deslocamento lateral do pino de soltura em centímetros" value="0" step="1" min="-50" max="50"></label>
+        </span></div>
       <canvas id="machine" role="img" aria-label="Desenho da máquina e animação do disparo" height="440"></canvas>
       <canvas id="machine3d" role="img" aria-label="Vista 3D da máquina e do disparo; arraste para girar a câmera" height="440" hidden></canvas>
       <div id="stats" role="region" aria-label="Resultados do disparo" aria-live="polite"></div>

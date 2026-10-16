@@ -1,5 +1,5 @@
 import type { Joint, Mechanism, Vec } from '../physics/model';
-import { axisAngle, type Body3, type Joint3, type Mechanism3, type V3 } from './model3';
+import { add, axisAngle, norm, rotate, sub, type Body3, type Joint3, type Mechanism3, type V3 } from './model3';
 
 const Z: V3 = [0, 0, 1];
 const v3 = (p: Vec, z = 0): V3 => [p[0], p[1], z];
@@ -47,4 +47,18 @@ export function lift(m: Mechanism): Mechanism3 {
     pulls: m.pulls?.map((p) => ({ ...p, local: v3(p.local) })),
     springs: m.springs?.map((s) => ({ ...s, local: v3(s.local), anchor: v3(s.anchor) })),
   };
+}
+
+// Out-of-plane conditions a planar model can't have: a crosswind (m/s, +z) and the release pin mounted off the arm's
+// center line (m, +z). The sling is re-measured from the moved pin to the stone, which stays on the center line.
+export function apply3d(m: Mechanism3, o: { windZ: number; pinOffset: number }): Mechanism3 {
+  const out: Mechanism3 = { ...m, air: { ...m.air, wind: [0, 0, o.windZ] }, joints: [...m.joints] };
+  const j = m.joints[m.sling];
+  if (j.kind !== 'rope' || !o.pinOffset) return out;
+  const atA = j.a !== m.projectile; // which end holds the pin
+  const pin: V3 = atA ? [j.pa[0], j.pa[1], j.pa[2] + o.pinOffset] : [j.pb[0], j.pb[1], j.pb[2] + o.pinOffset];
+  const end = (b: number | 'ground', p: V3): V3 => (b === 'ground' ? p : add(m.bodies[b].pos, rotate(m.bodies[b].quat, 0, p)));
+  const pa = atA ? pin : j.pa, pb = atA ? j.pb : pin;
+  out.joints[m.sling] = { ...j, pa, pb, length: norm(sub(end(j.a, pa), end(j.b, pb))) };
+  return out;
 }

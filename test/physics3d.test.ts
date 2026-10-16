@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { G } from '../src/physics/model';
 import { fly3 } from '../src/physics3d/ballistics3';
 import { dot, norm, rotate, rotateInv, sub, type Mechanism3, type V3 } from '../src/physics3d/model3';
+import { apply3d, lift } from '../src/physics3d/lift';
 import { simulate3 } from '../src/physics3d/solver3';
+import { build, defaultsFor } from '../src/presets';
 
 const still = { projectile: 0, sling: 0, axle: 0, releaseAngle: -Infinity, air: { density: 0, cd: 0 } };
 
@@ -50,5 +52,15 @@ describe('motor 3D', () => {
     const w = fly3([0, 5, 0], v0, 0.002, [0, 0, 5]);
     expect(w.lateral).toBeGreaterThan(1);
     expect(fly3([0, 5, 0], v0, 0.002, [0, 0, -5]).lateral).toBeCloseTo(-w.lateral, 9);
+  });
+
+  it('pino da funda fora do centro: desvio lateral antissimétrico e ~linear no deslocamento', () => {
+    const m = lift(build('hinged', defaultsFor('hinged')));
+    const lat = (d: number) => simulate3(apply3d(m, { windZ: 0, pinOffset: d }), { afterRelease: 0 }).lateral;
+    const [a, b, c] = [lat(0.1), lat(-0.1), lat(0.2)];
+    expect(Math.abs(a)).toBeGreaterThan(0.3);
+    expect(b).toBeCloseTo(-a, 6);
+    expect(c / a).toBeGreaterThan(1.9);
+    expect(c / a).toBeLessThan(2.1);
   });
 });
