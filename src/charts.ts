@@ -18,6 +18,8 @@ export const css = (name: string) => getComputedStyle(document.documentElement).
 
 // CSS height in px; the height attribute becomes the hi-DPI backing size, so the layout value is kept in data-h
 export const cssHeight = (c: HTMLCanvasElement) => Number((c.dataset.h ??= c.getAttribute('height')!));
+// before its first draw a width:100% canvas keeps the 300×h intrinsic ratio (≈1000 px tall on desktop): pin the height at load
+export const sizeCanvases = () => document.querySelectorAll('canvas').forEach((c) => (c.style.height = `${cssHeight(c)}px`));
 
 export function fitCanvas(c: HTMLCanvasElement) {
   const dpr = window.devicePixelRatio || 1;

@@ -35,7 +35,8 @@ export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p:
     box.disabled = !$<HTMLInputElement>('opt-arm').checked;
     if (!armDirty) box.value = String(+sum.toFixed(3));
     const fmt = (v: number) => +v.toFixed(3);
-    $('opt-arm-hint').textContent = `Atual: ${fmt(o.params.longArm)} + ${fmt(o.params.shortArm)} = ${fmt(sum)} m. Limites: ${armTotalLimits().join(' a ')} m.`;
+    $('opt-arm-hint').textContent = `Atual: ${fmt(o.params.longArm)} + ${fmt(o.params.shortArm)} = ${fmt(sum)} m. Limites: ${armTotalLimits().join(' a ')} m.` +
+      (o.kind() === 'walking' ? ' No walking arm, fique perto do total atual: perna, funda e soltura foram ajustadas para ele.' : '');
   }
   $('opt').addEventListener('focusin', syncArm);
   $('opt-arm').addEventListener('change', () => {
@@ -114,14 +115,16 @@ export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p:
         found.push({ u: map.toUnit(r.params), value: r.value, params: r.params });
         status(`Otimizando… ${found.length}/${STARTS} partidas concluídas · ${evals} simulações`);
       },
-      done: () => showOptima(vars, distinctOptima(found), current, evals),
+      done: () => showOptima(vars, distinctOptima(found), current, evals, arm ? armTotal : undefined),
     });
   });
 
-  function showOptima(optVars: OptVar[], all: ReturnType<typeof distinctOptima<{ u: number[]; value: number; params: Params }>>, current: number, evals: number) {
+  function showOptima(optVars: OptVar[], all: ReturnType<typeof distinctOptima<{ u: number[]; value: number; params: Params }>>, current: number, evals: number, armTotal?: number) {
     const vars = optVars.flatMap((v): (keyof Params)[] => (v === 'armSplit' ? ['longArm', 'shortArm'] : [v])); // table columns
     const name = objective() === 'range' ? 'Alcance' : 'Eficiência';
-    if (!all.length) return void status(`Nenhuma das ${STARTS} partidas produziu um disparo válido. Revise o design.`);
+    const sum = +(o.params.longArm + o.params.shortArm).toFixed(3);
+    if (!all.length) return void status(`Nenhuma das ${STARTS} partidas produziu um disparo válido. ` +
+      (armTotal !== undefined && armTotal !== sum ? `Com o braço total de ${armTotal} m o design não fecha: tente um total mais perto do atual (${sum} m).` : 'Revise o design.'));
     // optima far below the best are dead ends (often stuck on a slider limit): count them, don't list them
     const optima = all.filter((op) => op.value >= 0.5 * all[0].value);
     const stuck = STARTS - optima.reduce((n, op) => n + op.count, 0);

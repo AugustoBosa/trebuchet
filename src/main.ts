@@ -1,4 +1,4 @@
-import { css, drawChart, timeAt, type ChartSpec } from './charts';
+import { css, drawChart, sizeCanvases, timeAt, type ChartSpec } from './charts';
 import { createEditor } from './editor';
 import { HINTS, LABELS, RANGES } from './labels';
 import { mountOptimizer } from './optimizer-ui';
@@ -13,6 +13,8 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 const form = $<HTMLFormElement>('params');
 const kindSel = $<HTMLSelectElement>('kind');
 const machine = $<HTMLCanvasElement>('machine');
+if (matchMedia('(max-width: 800px)').matches) machine.dataset.h = '300'; // phones: leave room for the results below
+sizeCanvases();
 const params: Params = { ...defaults }; // values survive switching type
 kindSel.innerHTML =
   Object.entries(KINDS).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('') +

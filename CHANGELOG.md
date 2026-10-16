@@ -15,12 +15,17 @@ Simulador de trebuchets (Vite + TypeScript). Rodar: `npm run dev` · testes: `np
 
 ### Editor / UI
 1. **O editor livre não tem ferramentas para tambor, rolete, mola e espetos de pouso.** Hoje recusa os tipos cam/roller. ~0,5–1 dia.
-2. **Otimizador no walking arm:** com o braço total diferente do atual, quase nenhum tiro sai válido. Avisar o usuário ou estreitar os limites.
-3. **No celular, o canvas da máquina tem 440 px de altura** e ocupa mais da metade da tela. Dá para reduzir para ~300 px. ~10 min.
-4. **Canvas ainda não desenhado usa a proporção padrão 300×h.** Exemplo: `#heat` no `learn.html` fica com ~1000 px até a varredura terminar, e o layout pula. Basta uma regra de CSS.
 
 ## 2026-10-16
 
+### Correções rápidas (segunda leva)
+- **Celular:** o canvas da máquina passou de 440 para 300 px (`data-h` definido em `main.ts` para ≤ 800 px). Os controles começam ~140 px mais acima.
+- **Salto de layout:** um canvas ainda não desenhado ficava com a proporção 300×h (o `#heat` chegava a ~1000 px e as mini-simulações do `learn.html` também). `sizeCanvases()` em `charts.ts` fixa a altura no carregamento das duas páginas.
+- **Otimizador no walking arm:**
+  - a dica do braço total avisa para ficar perto do total atual;
+  - quando nenhuma partida dá certo com outro total, a mensagem sugere voltar para perto do atual em vez de "Revise o design".
+
+### Primeira leva
 - **Git:** repositório criado (branch `main`) com `.gitignore` para `node_modules`, `dist`, logs e `.claude/settings.local.json`.
 - **Bug de canvas em telas hi-DPI (já existia):** `fitCanvas` lia a altura do atributo `height` e gravava `h·dpr` nele. Com DPR > 1, cada redesenho multiplicava a altura (no teste, até 76 000 px). A altura lógica agora fica em `data-h`, via `cssHeight()` em `src/charts.ts`, usada também pelo editor e pelo heatmap.
 - **Layout no celular (≤ 800 px):** máquina e resultados aparecem acima do painel de controles, e os gráficos depois. Só CSS: `section { display: contents }` + `order`.

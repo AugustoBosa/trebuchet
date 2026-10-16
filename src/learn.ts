@@ -1,6 +1,6 @@
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
-import { css, drawChart, drawHeatmap, fitCanvas, heatCell, timeAt, type ChartSpec, type HeatSpec } from './charts';
+import { css, drawChart, drawHeatmap, fitCanvas, heatCell, sizeCanvases, timeAt, type ChartSpec, type HeatSpec } from './charts';
 import { HINTS, LABELS, RANGES } from './labels';
 import { fly } from './physics/ballistics';
 import { G } from './physics/model';
@@ -317,3 +317,4 @@ lazy($('rank'), () => setTimeout(() => {
 
 document.querySelectorAll<HTMLElement>('.mini').forEach(mini);
 document.querySelectorAll<HTMLElement>('.compare').forEach(compare);
+sizeCanvases(); // after .mini built its canvases
