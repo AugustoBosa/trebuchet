@@ -6,6 +6,7 @@ export const LABELS: Record<keyof Params, string> = {
   shortArm: 'Braço curto (m)',
   armMass: 'Massa do braço (kg)',
   cwMass: 'Contrapeso (kg)',
+  cwDensity: 'Densidade do contrapeso (kg/m³)',
   hingeLength: 'Articulação → contrapeso (m)',
   crewForce: 'Força da equipe (N)',
   pullStroke: 'Curso do puxão (m)',
@@ -33,7 +34,7 @@ export const LABELS: Record<keyof Params, string> = {
 // [min, max, step] for the sliders, plus a one-line explanation of why each knob matters
 export const RANGES: Record<keyof Params, [number, number, number]> = {
   pivotHeight: [0.5, 15, 0.1], longArm: [0.2, 20, 0.01], shortArm: [0.05, 8, 0.01], armMass: [0.1, 2000, 0.1],
-  cwMass: [1, 20000, 0.1], hingeLength: [0.1, 5, 0.05], crewForce: [100, 50000, 100], pullStroke: [0.2, 5, 0.1],
+  cwMass: [1, 20000, 0.1], cwDensity: [1000, 11300, 100], hingeLength: [0.1, 5, 0.05], crewForce: [100, 50000, 100], pullStroke: [0.2, 5, 0.1],
   projMass: [0.01, 200, 0.005], projRadius: [0.01, 0.5, 0.002], slingLength: [0.3, 20, 0.1], releaseDeg: [0, 90, 1],
   airDensity: [0, 1.5, 0.005], dragCd: [0, 1.5, 0.01], axleMu: [0, 1, 0.01], axleRadius: [0.001, 0.3, 0.001], troughMu: [0, 1, 0.01], cockDeg: [0, 85, 1], legLength: [0.1, 10, 0.01], legMass: [0.1, 500, 0.1],
   pulleyHeight: [1, 30, 0.1], camStart: [0.02, 3, 0.01], camEnd: [0.01, 3, 0.01], axleLift: [0.05, 5, 0.01], rollerOffset: [0.05, 10, 0.01], springK: [100, 200000, 100], springRest: [0.1, 10, 0.05],
@@ -44,6 +45,7 @@ export const HINTS: Record<keyof Params, string> = {
   shortArm: 'Distância percorrida pelo contrapeso. Razão típica longo/curto: 3 a 6.',
   armMass: 'Energia gasta girando o próprio braço é perdida. Braços leves e rígidos rendem mais.',
   cwMass: 'A fonte de energia: E = M·g·Δh. Razão contrapeso/projétil típica: 50 a 150.',
+  cwDensity: 'Material do contrapeso: pedra ≈ 2500, concreto ≈ 2400, ferro ≈ 7800, chumbo ≈ 11300. Mesma massa e mesma energia; mais denso = menor, cabe sob eixos baixos e raspa menos o chão.',
   hingeLength: 'Haste do contrapeso articulado: quanto mais longa (sem bater no chão), mais vertical a queda.',
   crewForce: 'Soma das forças da equipe. Uma pessoa puxa ~200–300 N num puxão curto.',
   pullStroke: 'Quanto a corda desce. Energia da equipe = força × curso.',

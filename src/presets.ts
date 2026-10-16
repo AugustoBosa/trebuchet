@@ -9,6 +9,7 @@ export const defaults = {
   shortArm: 1.25, // pivot → counterweight / rope attachment
   armMass: 60, // kg, uniform beam
   cwMass: 1000,
+  cwDensity: 2500, // kg/m³: sets the counterweight's size (stone 2500, iron 7800, lead 11300)
   hingeLength: 1.2, // hinged: hinge → counterweight center
   crewForce: 8000, // N, traction: total crew pull (~40 people × 200 N)
   pullStroke: 2, // m, traction: how far the crew can pull the rope down
@@ -43,17 +44,17 @@ export const KINDS: Record<Kind, { label: string; info: string; fields: (keyof P
   fixed: {
     label: 'Contrapeso fixo',
     info: 'O contrapeso é rígido no braço e cai num arco. Parte da energia vira balanço e rotação do contrapeso, e a eficiência fica em torno de 55–60%.',
-    fields: [...BASE, 'cwMass', ...SHOT],
+    fields: [...BASE, 'cwMass', 'cwDensity', ...SHOT],
   },
   hinged: {
     label: 'Contrapeso articulado',
     info: 'O contrapeso pende de uma articulação e cai quase na vertical, o que tira menos energia do braço. Foi o grande salto medieval (séc. XII–XIII).',
-    fields: [...BASE, 'cwMass', 'hingeLength', ...SHOT],
+    fields: [...BASE, 'cwMass', 'cwDensity', 'hingeLength', ...SHOT],
   },
   floating: {
     label: 'Floating arm',
     info: 'Design moderno: o contrapeso desce numa guia vertical e o eixo rola num trilho horizontal. Quase toda a queda vira energia útil.',
-    fields: [...BASE, 'cwMass', ...SHOT],
+    fields: [...BASE, 'cwMass', 'cwDensity', ...SHOT],
   },
   traction: {
     label: 'Tração humana',
@@ -63,14 +64,14 @@ export const KINDS: Record<Kind, { label: string; info: string; fields: (keyof P
   whipper: {
     label: 'Whipper',
     info: 'Variante moderna do articulado: armado com o braço longo apontando para a frente e o contrapeso deitado sobre o braço, acima do eixo. O braço tomba à frente, passa por baixo do eixo e dá a volta (~270° de giro no padrão, contra ~125° do articulado), e o contrapeso cai de cima do eixo até abaixo dele: mais energia pelo mesmo peso. A funda afrouxa e reestica com trancos, e é difícil de ajustar. Pede eixo mais alto que o braço longo. Geometria reconstruída de descrições de construtores (sem desenhos publicados).',
-    fields: [...BASE, 'cwMass', 'hingeLength', 'cockDeg', ...SHOT],
+    fields: [...BASE, 'cwMass', 'cwDensity', 'hingeLength', 'cockDeg', ...SHOT],
     // reconstructed from build descriptions (no published drawings): 5:1 arm ratio, axle above the long arm's reach
     preset: { pivotHeight: 5, longArm: 4, shortArm: 0.8, armMass: 50, hingeLength: 2, slingLength: 3.5, cockDeg: 45 },
   },
   walking: {
     label: 'Walking arm',
     info: 'Design de 2015 (J. Stapleton): sem estrutura, só o braço e uma perna triangular com espinhos. Armado, fica em pé sobre a ponta do braço longo, contrapeso no topo, com a perna pendurada à frente, presa num ângulo por uma corda de ajuste e com os espinhos no ar. Solto, tomba inteiro para a frente; os espinhos cravam onde tocam o chão, a corda afrouxa e o braço chicoteia por cima da perna plantada: a máquina "anda". Medidas das instruções do próprio autor (máquina do recorde leve de 2018: bola de 85 g a 81 m); ângulo da perna, funda e soltura ajustados pelo otimizador. O modelo dá ~54 m neste ajuste com folga e até ~68 m no limite (contrapeso raspando o chão na soltura, que é como o autor recomenda ajustar). A diferença restante pode vir do projétil, que no real parte de uma plataforma sobre o braço (aqui parte do chão), da plataforma de lançamento (+5 cm de queda) e do arrasto real da bola.',
-    fields: ['longArm', 'shortArm', 'armMass', 'legLength', 'legMass', 'cwMass', 'cockDeg', ...SHOT],
+    fields: ['longArm', 'shortArm', 'armMass', 'legLength', 'legMass', 'cwMass', 'cwDensity', 'cockDeg', ...SHOT],
     // Stapleton's Instructables (the 2018 lightweight record machine), inches → m: finger 20", counterweight
     // 17.5 lb centered ~17.5" behind the axle, leg 20.5", 1/4" axle bolt, racquetball topped up with water to 3 oz
     preset: {
@@ -84,7 +85,7 @@ export const KINDS: Record<Kind, { label: string; info: string; fields: (keyof P
   murlin: {
     label: 'MURLIN',
     info: 'Design moderno (L. Vance, "Multi-Radius Linear Nodes"): o contrapeso pende de uma polia no alto da estrutura e a corda vai enrolada no eixo do braço sobre "nós" de raio decrescente. No começo o raio grande dá torque para arrancar o braço; no fim o raio pequeno deixa o braço girar rápido enquanto o contrapeso quase para, e quase toda a energia fica no braço. A polia deixa o contrapeso cair de bem acima do eixo. Aqui os nós viram uma espiral contínua (raio linear do início ao fim) e o contrapeso cai na vertical (no real, braço e contrapeso giram em planos diferentes, sem colidir). As plantas do autor não são públicas: geometria reconstruída, braço com metade do articulado padrão.',
-    fields: [...BASE, 'pulleyHeight', 'camStart', 'camEnd', 'cwMass', ...SHOT],
+    fields: [...BASE, 'pulleyHeight', 'camStart', 'camEnd', 'cwMass', 'cwDensity', ...SHOT],
     // drum ≤ half the long arm, end radius ≥ 0.1 m (rope can't wind tighter than the hub); pulley, sling and
     // release from this project's optimizer at those radii (≈318 m vs 225 m for the default hinged with a 5 m arm)
     preset: { longArm: 2.5, shortArm: 0.5, armMass: 30, pulleyHeight: 4.3, camStart: 1.25, camEnd: 0.1, slingLength: 3.8, releaseDeg: 35 },
@@ -92,25 +93,25 @@ export const KINDS: Record<Kind, { label: string; info: string; fields: (keyof P
   wheel: {
     label: 'Roda (wheel)',
     info: 'Parente do MURLIN sem polia: a corda do contrapeso enrola direto num tambor de raio variável no eixo do braço, e o contrapeso pende embaixo dele. Mesma ideia de "câmbio" (raio grande arranca, raio pequeno acelera), mas a queda fica limitada à altura do eixo. Tambor modelado como espiral de raio linear; contrapeso cai na vertical.',
-    fields: [...BASE, 'camStart', 'camEnd', 'cwMass', ...SHOT],
+    fields: [...BASE, 'camStart', 'camEnd', 'cwMass', 'cwDensity', ...SHOT],
     preset: { longArm: 2.5, shortArm: 0.5, armMass: 30, camStart: 0.9, camEnd: 0.1, slingLength: 3.8, releaseDeg: 42 }, // optimizer, same bounds as MURLIN
   },
   f2k: {
     label: 'F2K',
     info: 'Floating Axle Trebuchet 2000: um floating arm cujas rodas do eixo começam erguidas acima do trilho. No início o braço se apoia num rolete fixo e gira sobre ele enquanto o contrapeso desce na guia; quando as rodas pousam no trilho (com tranco), segue como floating arm. Ganha queda extra do contrapeso e alcance; o pouso custa eficiência, e quanto depende da geometria: com o rolete a 0,5 m (padrão) o tranco leva ~13% da energia, com o rolete a 1 m o pouso é suave e a eficiência passa a do floating arm. Só o princípio é documentado (The Hurl): posição do rolete e altura inicial reconstruídas.',
-    fields: [...BASE, 'axleLift', 'rollerOffset', 'cwMass', ...SHOT],
+    fields: [...BASE, 'axleLift', 'rollerOffset', 'cwMass', 'cwDensity', ...SHOT],
     // the floating arm's default geometry, so the two compare like for like
     preset: { pivotHeight: defaults.pivotHeight, longArm: defaults.longArm, shortArm: defaults.shortArm, armMass: defaults.armMass, slingLength: defaults.slingLength, releaseDeg: defaults.releaseDeg, axleLift: defaults.axleLift, rollerOffset: defaults.rollerOffset },
   },
   fet: {
     label: 'FET (tudo flutua)',
     info: 'Floating Everything Trebuchet: um floating arm sem a guia vertical do contrapeso. Eixo rola no trilho e o contrapeso pende livre da ponta do braço curto; como nada empurra o conjunto na horizontal, o contrapeso pesado cai quase na vertical sozinho, e o braço leve é que se desloca. Mais compacto que o floating arm; no real, mais sujeito a descarrilar.',
-    fields: [...BASE, 'cwMass', ...SHOT],
+    fields: [...BASE, 'cwMass', 'cwDensity', ...SHOT],
   },
   ka: {
     label: 'King Arthur',
     info: 'Variante moderna do articulado, "super escorada": armado com o braço longo quase na vertical para baixo e a haste do contrapeso em pé sobre a ponta do braço curto, travada nele. Ao soltar, o contrapeso tomba do alto: a queda é muito maior que a do articulado comum com a mesma estrutura, e pouco contrapeso joga longe. Difícil de armar e de ajustar. Armado aqui com a haste 2° à frente da vertical; ângulo do braço = quanto a ponta fica atrás da vertical.',
-    fields: [...BASE, 'cwMass', 'hingeLength', 'cockDeg', ...SHOT],
+    fields: [...BASE, 'cwMass', 'cwDensity', 'hingeLength', 'cockDeg', ...SHOT],
     // the hinged's frame (short arm, hanger) raised to fit the hanging long arm; sling/release/arm angle from this
     // project's optimizer with that frame fixed (≈384 m, η ≈ 58 %, vs 225 m and 79 % for the default hinged)
     preset: { pivotHeight: 5.3, cockDeg: 6, slingLength: 6.1, releaseDeg: 38, hingeLength: defaults.hingeLength, shortArm: defaults.shortArm, longArm: defaults.longArm },
@@ -118,7 +119,7 @@ export const KINDS: Record<Kind, { label: string; info: string; fields: (keyof P
   faka: {
     label: 'FAKA (King Arthur flutuante)',
     info: 'Floating Axle King Arthur (C. Macomber, 2006): o King Arthur com o eixo sobre rodas, livre para rolar para a frente e para trás num trilho no alto da estrutura. Junta a queda enorme do King Arthur com a eficiência do eixo flutuante. No real, nada absorve a energia que sobra: as rodas batem nos batentes e o braço pode descarrilar se o ajuste estiver errado (aqui o trilho não tem fim; no ajuste padrão o eixo rola ~1,3 m).',
-    fields: [...BASE, 'cwMass', 'hingeLength', 'cockDeg', ...SHOT],
+    fields: [...BASE, 'cwMass', 'cwDensity', 'hingeLength', 'cockDeg', ...SHOT],
     // King Arthur's frame; sling/release/arm angle re-optimized (≈499 m, η ≈ 85 %; the axle rolls ~1.3 m)
     preset: { pivotHeight: 5.3, cockDeg: 37, slingLength: 6.2, releaseDeg: 39, hingeLength: defaults.hingeLength, shortArm: defaults.shortArm, longArm: defaults.longArm },
   },
@@ -130,8 +131,6 @@ export const KINDS: Record<Kind, { label: string; info: string; fields: (keyof P
 };
 
 export const defaultsFor = (kind: Kind): Params => ({ ...defaults, ...KINDS[kind].preset });
-
-const STONE = 2500; // kg/m³, counterweight drawn as a stone block of this density
 
 // Cocked pose. Classic: long arm points back-down (tip on the ground if it reaches), short arm up front.
 // Whipper: long arm points forward, cockDeg above horizontal; the counterweight lies on the arm above the axle.
@@ -160,7 +159,7 @@ export function build(kind: Kind, p: Params): Mechanism {
   // Classic machines start with the stone in the trough; a whipper's raised tip lets it hang in the sling.
   const hanging = kind === 'whipper' && p.slingLength < dy;
   if (!hanging && p.slingLength <= Math.abs(dy)) throw new Error('Funda curta demais para alcançar o chão');
-  const cwR = Math.cbrt(p.cwMass / STONE / ((4 / 3) * Math.PI));
+  const cwR = Math.cbrt(p.cwMass / p.cwDensity / ((4 / 3) * Math.PI));
 
   const bodies: Body[] = [
     {

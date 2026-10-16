@@ -1,3 +1,4 @@
+import { RANGES } from './labels';
 import { defaults, KINDS, type Kind, type Params } from './presets';
 import { sanitizeSketch, type Sketch } from './sketch';
 
@@ -35,7 +36,7 @@ export function sanitize(raw: unknown): Design {
   const params = { ...defaults };
   for (const k of Object.keys(defaults) as (keyof Params)[]) {
     const v = (d.params as Record<string, unknown> | undefined)?.[k];
-    if (typeof v === 'number' && Number.isFinite(v)) params[k] = v;
+    if (typeof v === 'number' && Number.isFinite(v)) params[k] = Math.min(RANGES[k][1], Math.max(RANGES[k][0], v)); // e.g. density 0 → infinite CW
   }
   const name = String(d.name ?? 'Sem nome').slice(0, 80);
   if (d.kind === 'free') return { version: 1, name, kind: 'free', params, sketch: sanitizeSketch(d.sketch) };
