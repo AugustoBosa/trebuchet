@@ -26,7 +26,7 @@
       /* machine + results above the long control panel; charts after it */
       section { display: contents; }
       section > * { order: 1; }
-      #machine, #stats { order: -1; }
+      #view-row, #machine, #machine3d, #stats { order: -1; }
     }
     main > * { min-width: 0; }
     h1 { font-size: 20px; margin: 0 0 12px; text-wrap: balance; }
@@ -80,7 +80,8 @@
     #opt-result td, #opt-result th { padding: 2px 4px; text-align: right; border-bottom: 1px solid var(--line); }
     #opt-result td:first-child, #opt-result th:first-child { text-align: left; }
     #sweep { cursor: pointer; }
-    #machine[data-mode] { touch-action: none; }
+    #machine[data-mode], #machine3d { touch-action: none; }
+    #view3d[aria-pressed=true] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
     #machine[data-mode=edit] { cursor: crosshair; }
     #machine[data-mode=handles] { cursor: grab; }
     #data-table { margin: 0 0 12px; font-size: 13px; }
@@ -196,7 +197,9 @@
       </fieldset>
     </aside>
     <section>
+      <div class="row" id="view-row"><button class="ghost" id="view3d" aria-pressed="false" title="Alterna entre o desenho 2D e a vista 3D (arraste para girar, roda do mouse para zoom)">Vista 3D</button></div>
       <canvas id="machine" role="img" aria-label="Desenho da máquina e animação do disparo" height="440"></canvas>
+      <canvas id="machine3d" role="img" aria-label="Vista 3D da máquina e do disparo; arraste para girar a câmera" height="440" hidden></canvas>
       <div id="stats" role="region" aria-label="Resultados do disparo" aria-live="polite"></div>
       <div id="physics"></div>
       <div class="charts">

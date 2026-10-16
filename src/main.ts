@@ -6,6 +6,7 @@ import { G, type Mechanism, type Vec } from './physics/model';
 import { initialState, simulate, type Result } from './physics/solver';
 import { build, defaults, defaultsFor, geometry, KINDS, type Kind, type Params } from './presets';
 import { drawFlight, drawMachine, type Bounds, type View } from './render';
+import type { View3d } from './render3d';
 import { compile, emptySketch, toSketch } from './sketch';
 import { deleteDesign, download, importFile, listDesigns, loadCurrent, saveCurrent, saveDesign, type Design } from './storage';
 
@@ -13,7 +14,8 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 const form = $<HTMLFormElement>('params');
 const kindSel = $<HTMLSelectElement>('kind');
 const machine = $<HTMLCanvasElement>('machine');
-if (matchMedia('(max-width: 800px)').matches) machine.dataset.h = '300'; // phones: leave room for the results below
+const machine3d = $<HTMLCanvasElement>('machine3d');
+if (matchMedia('(max-width: 800px)').matches) machine.dataset.h = machine3d.dataset.h = '300'; // phones: leave room for the results below
 sizeCanvases();
 const params: Params = { ...defaults }; // values survive switching type
 kindSel.innerHTML =
@@ -146,12 +148,32 @@ let raf = 0;
 let current: { m: Mechanism; r: Result; b: Bounds; specs: ChartSpec[] } | undefined;
 let lastT = 0;
 
+const stillResult = (m: Mechanism): Result => ({
+  frames: [{ t: 0, q: initialState(m).q, ke: 0, pe: 0, kes: [], forces: [], speed: 0 }],
+  flight: [], range: 0, efficiency: 0, inputEnergy: 0, peakForce: [], dissipated: 0,
+});
+
+// 2D ↔ 3D: three.js loads on first use, so the 2D page doesn't pay for it
+let view3d: View3d | undefined;
+$('view3d').addEventListener('click', async (e) => {
+  const btn = e.currentTarget as HTMLButtonElement;
+  const on = btn.getAttribute('aria-pressed') !== 'true';
+  view3d ??= (await import('./render3d')).createView3d(machine3d);
+  btn.setAttribute('aria-pressed', String(on));
+  machine.hidden = on;
+  machine3d.hidden = !on;
+  if (current && machine.dataset.mode === 'play') drawAt(lastT);
+  else preview();
+});
+
+
 function drawAt(t: number) {
   if (!current) return;
   lastT = t;
   const { m, r, b, specs } = current;
   machine.dataset.mode = 'play';
-  drawMachine(machine, m, r, t, b);
+  if (view3d && !machine3d.hidden) view3d.draw(m, r, t, b);
+  else drawMachine(machine, m, r, t, b);
   drawFlight($('flight'), r, t, b.x0);
   specs.forEach((s, i) => drawChart(chartEls[i], s, Math.min(t, s.t.at(-1)!)));
 }
@@ -185,6 +207,11 @@ function handles(m: Mechanism): Handle[] {
 // static cocked pose (no simulation): free mode shows the editor, presets show draggable handles
 function preview() {
   cancelAnimationFrame(raf);
+  if (view3d && !machine3d.hidden) { // 3D: still cocked pose, no handles (editing stays in 2D)
+    const m = mechanismOrError();
+    if (m) view3d.draw(m, stillResult(m), 0, bounds());
+    return;
+  }
   if (isFree()) {
     machine.dataset.mode = 'edit';
     return editor.draw();
@@ -192,9 +219,7 @@ function preview() {
   const m = mechanismOrError();
   if (!m) return;
   machine.dataset.mode = 'handles';
-  const q = initialState(m).q;
-  const still: Result = { frames: [{ t: 0, q, ke: 0, pe: 0, kes: [], forces: [], speed: 0 }], flight: [], range: 0, efficiency: 0, inputEnergy: 0, peakForce: [], dissipated: 0 };
-  handleView = drawMachine(machine, m, still, 0, bounds());
+  handleView = drawMachine(machine, m, stillResult(m), 0, bounds());
   const g = machine.getContext('2d')!; // same transform drawMachine just set
   g.font = '11px system-ui, sans-serif';
   for (const hd of handles(m)) {
