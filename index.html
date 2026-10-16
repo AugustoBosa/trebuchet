@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#1d1a16" media="(prefers-color-scheme: dark)" />
+  <meta name="theme-color" content="#f4efe4" media="(prefers-color-scheme: light)" />
+  <title>Laboratório de Trebuchets</title>
+  <style>
+    :root {
+      color-scheme: light dark; /* native controls (select popups, scrollbars) follow the theme */
+      --bg: #f4efe4; --ink: #2b2620; --muted: #6b6052; --accent: #a0412d; --line: #d8cdb8; --field: #8c8070;
+      --series-1: #2a78d6; --series-2: #d4521f; --series-3: #0f8a5f; --danger: #c62828; --on-accent: #fff;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1d1a16; --ink: #ece4d4; --muted: #a39887; --accent: #e07a5f; --line: #3a342c; --field: #7f7565;
+        --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --danger: #ff6b6b; --on-accent: #1d1a16;
+      }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.4 system-ui, sans-serif; }
+    main { display: grid; grid-template-columns: 300px 1fr; gap: 16px; padding: 16px; max-width: 1400px; margin: auto; }
+    @media (max-width: 800px) {
+      main { grid-template-columns: 1fr; }
+      /* machine + results above the long control panel; charts after it */
+      section { display: contents; }
+      section > * { order: 1; }
+      #machine, #stats { order: -1; }
+    }
+    main > * { min-width: 0; }
+    h1 { font-size: 20px; margin: 0 0 12px; text-wrap: balance; }
+    h2 { font-size: 15px; margin: 0 0 6px; }
+    label { display: grid; grid-template-columns: 1fr 80px; gap: 2px 8px; align-items: center; margin: 6px 0; font-size: 13px; }
+    label input[type=range] { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); margin: 0; }
+    input[type=number], input[type=text] { width: 100%; padding: 4px; background: transparent; color: var(--ink); border: 1px solid var(--field); border-radius: 4px; font: inherit; }
+    button, select { padding: 7px 12px; border: 0; border-radius: 6px; background: var(--accent); color: var(--on-accent); font: 600 13px system-ui, sans-serif; cursor: pointer; }
+    select, button.ghost, .file { background: transparent; color: var(--ink); border: 1px solid var(--field); }
+    button:hover, .file:hover { filter: brightness(1.12); }
+    button.ghost:hover, select:hover, .file:hover { filter: none; background: color-mix(in srgb, var(--ink) 8%, transparent); }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .file:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .file input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+    option { background: var(--bg); color: var(--ink); }
+    .file { display: inline-block; padding: 7px 12px; border-radius: 6px; font: 600 13px system-ui, sans-serif; cursor: pointer; margin: 0; }
+    .file { position: relative; }
+    .row { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; align-items: center; }
+    canvas { width: 100%; display: block; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 12px; }
+    #stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin: 0 0 12px; }
+    .stat { border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+    .stat b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; }
+    .stat span { color: var(--muted); font-size: 12px; }
+    #err { color: var(--accent); font-weight: 600; }
+    #kind { width: 100%; font-size: 15px; }
+    #info, #hint { color: var(--muted); font-size: 13px; }
+    #info { color: var(--ink); font-size: 14px; line-height: 1.5; }
+    dialog { max-width: min(520px, calc(100vw - 32px)); max-height: 80vh; overflow: auto; overscroll-behavior: contain; background: var(--bg); color: var(--ink); border: 1px solid var(--field); border-radius: 10px; padding: 16px 20px; }
+    dialog::backdrop { background: rgb(0 0 0 / .5); }
+    dialog h2 { font-size: 17px; margin: 0 0 8px; }
+    #hint { min-height: 3em; }
+    #physics { border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; }
+    #physics:empty { display: none; }
+    #physics ul { margin: 0; padding-left: 18px; }
+    .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 0 12px; }
+    fieldset { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; margin: 12px 0; }
+    legend { font-size: 12px; color: var(--muted); }
+    button, select, input { touch-action: manipulation; }
+    aside .row:has(#run) { position: sticky; bottom: 0; background: var(--bg); padding: 8px 0; margin: 0; z-index: 1; }
+    [hidden] { display: none !important; }
+    .muted { color: var(--muted); font-size: 13px; }
+    #tools { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+    #tools button { padding: 6px 4px; }
+    #tools button.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+    #free-props label { grid-template-columns: 1fr 110px; }
+    #free-props input[type=text], #free-props select { width: 100%; }
+    #opt label { grid-template-columns: 1fr 130px; }
+    #opt-vars { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; font-size: 12px; }
+    #opt-vars label { display: flex; gap: 6px; margin: 0; }
+    #opt-result table { width: 100%; font-size: 12px; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+    #opt-result td, #opt-result th { padding: 2px 4px; text-align: right; border-bottom: 1px solid var(--line); }
+    #opt-result td:first-child, #opt-result th:first-child { text-align: left; }
+    #sweep { cursor: pointer; }
+    #machine[data-mode] { touch-action: none; }
+    #machine[data-mode=edit] { cursor: crosshair; }
+    #machine[data-mode=handles] { cursor: grab; }
+    #data-table { margin: 0 0 12px; font-size: 13px; }
+    #data-table summary { cursor: pointer; color: var(--muted); padding: 4px 0; }
+    #data-table .scroll { max-height: 260px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+    #data-table table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+    #data-table th, #data-table td { padding: 2px 8px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+    #data-table thead th { position: sticky; top: 0; background: var(--bg); }
+    #opt label, #opt label select { min-width: 0; }
+    #opt label.chk { display: flex; gap: 6px; font-size: 12px; }
+    #opt-arm-box { margin: 8px 0; padding-top: 6px; border-top: 1px solid var(--line); }
+    #opt-help { max-width: min(680px, calc(100vw - 32px)); line-height: 1.5; font-size: 14px; }
+    #opt-help h3 { font-size: 15px; margin: 16px 0 4px; }
+    #opt-help ol, #opt-help ul { padding-left: 20px; margin: 4px 0; }
+    #opt-help li { margin: 6px 0; }
+    #opt-help li ul { font-size: 13px; color: var(--muted); }
+    @media (pointer: coarse) {
+      button, select, .file, input[type=number], input[type=text] { min-height: 44px; }
+      input[type=range] { min-height: 32px; }
+      #opt-vars label { min-height: 36px; }
+      #opt-vars input { width: 20px; height: 20px; }
+    }
+    @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; } }
+  </style>
+</head>
+<body>
+  <main>
+    <aside>
+      <h1>Laboratório de Trebuchets</h1>
+      <p><a href="./learn.html" style="color: var(--accent)">Aprenda a física por trás →</a></p>
+      <select id="kind" aria-label="Tipo de trebuchet"></select>
+      <div class="row"><button type="button" class="ghost" id="info-btn" aria-haspopup="dialog">ⓘ Sobre este tipo</button></div>
+      <dialog id="info-dlg" aria-labelledby="info-title">
+        <form method="dialog"><h2 id="info-title"></h2><p id="info"></p><button class="ghost">Fechar</button></form>
+      </dialog>
+      <div id="preset-panel">
+        <form id="params" onsubmit="return false"></form>
+        <p id="hint">Passe o mouse ou clique num parâmetro para ver por que ele importa.</p>
+        <button class="ghost" id="to-free">Copiar para o editor livre</button>
+        <fieldset id="opt">
+          <legend>Otimizar</legend>
+          <div class="row"><button type="button" class="ghost" id="opt-help-btn" aria-haspopup="dialog">ⓘ Como usar</button></div>
+          <label>Objetivo<select id="objective"><option value="range">Alcance</option><option value="efficiency">Eficiência</option></select></label>
+          <p class="muted">Variáveis livres para o otimizador:</p>
+          <div id="opt-vars"></div>
+          <div id="opt-arm-box">
+            <label class="chk"><input type="checkbox" id="opt-arm"> Distribuir o braço entre longo e curto</label>
+            <label>Comprimento total do braço (m)<input type="number" id="opt-arm-total" step="0.05" min="0.3" max="27" disabled aria-describedby="opt-arm-hint"></label>
+            <p class="muted" id="opt-arm-hint"></p>
+          </div>
+          <div class="row"><button type="button" id="opt-run">Otimizar</button><button type="button" class="ghost" id="opt-stop" hidden>Parar</button></div>
+          <p id="opt-status" class="muted" role="status" aria-live="polite"></p>
+          <div id="opt-result"></div>
+          <h2>Varredura</h2>
+          <label>Eixo X<select id="sw-x"></select></label>
+          <label>Eixo Y<select id="sw-y"></select></label>
+          <div class="row"><button type="button" class="ghost" id="sw-run">Varrer</button></div>
+        </fieldset>
+        <dialog id="opt-help" aria-labelledby="opt-help-title">
+          <form method="dialog">
+            <button class="ghost" aria-label="Fechar" style="float:right">✕</button>
+            <h2 id="opt-help-title">Como usar o otimizador</h2>
+            <h3>O que ele faz</h3>
+            <p>Procura, entre as variáveis que você liberar, os valores que dão o maior <b>alcance</b> ou a maior <b>eficiência</b> (parte da energia do contrapeso que chega ao projétil). Cada tentativa é uma simulação completa do disparo. A busca usa o método Nelder–Mead, que só compara resultados, a partir de <b>8 pontos de partida em paralelo</b>: o seu design atual e 7 pontos espalhados pela faixa permitida. Tudo o que você não liberar continua fixo no valor atual.</p>
+            <h3>Passo a passo</h3>
+            <ol>
+              <li><b>Monte o design base.</b> Escolha o tipo de trebuchet e ajuste os controles do jeito que quer partir. Ele é o ponto de comparação ("atual") e fixa todas as variáveis não marcadas.</li>
+              <li><b>Escolha o objetivo.</b> <i>Alcance</i> maximiza a distância em metros. <i>Eficiência</i> maximiza o percentual da energia de entrada que o projétil leva na soltura. Os dois podem pedir designs diferentes.</li>
+              <li><b>Marque as variáveis livres.</b> Por padrão são a funda e o ângulo de liberação. Quanto mais variáveis, mais simulações e mais chance de a busca parar em ótimos locais. Comece com 2 ou 3 e vá acrescentando. Densidade do ar, atrito e arrasto não aparecem: são condições do ambiente, não escolhas de projeto.</li>
+              <li><b>(Opcional) Fixe o comprimento total do braço.</b> Marque <i>Distribuir o braço entre longo e curto</i> e informe o <i>Comprimento total do braço</i>, a soma braço longo + braço curto, como se você tivesse uma viga desse tamanho para cortar. O otimizador passa a variar o tamanho dos dois braços ao mesmo tempo, sempre com <b>longo + curto = total</b>, e procura a melhor posição do eixo. Os braços longo e curto deixam de ser variáveis separadas (as caixas ficam desativadas).
+                <ul>
+                  <li>O campo começa com a soma atual (por exemplo 5 + 1,25 = 6,25 m). Para testar uma viga maior ou menor, digite outro valor.</li>
+                  <li>Cada braço tem de caber nos limites dos controles: longo de 0,2 a 20 m e curto de 0,05 a 8 m. Por isso o total aceito vai de cerca de 0,25 a 28 m.</li>
+                  <li>Nos tipos que usam outras medidas do braço (altura do eixo, haste do contrapeso, perna) elas continuam como você deixou, a menos que as marque também.</li>
+                </ul></li>
+              <li><b>Clique em Otimizar.</b> A barra de estado mostra quantas partidas já terminaram e quantas simulações foram feitas. Use <i>Parar</i> para interromper.</li>
+              <li><b>Leia a tabela.</b> A linha <i>atual</i> é o seu design. <i>melhor</i>, #2, #3… são ótimos locais diferentes, do melhor para o pior. A coluna <i>achado</i> diz em quantas partidas a busca chegou àquele ponto: quanto maior, mais confiável. O percentual ao lado do resultado é o ganho sobre o design atual.</li>
+              <li><b>Aplique.</b> O botão <i>Aplicar</i> de uma linha copia os valores para os controles e dispara o tiro completo, com passo de integração fino, então o resultado pode diferir por décimos de percentual do valor da busca.</li>
+            </ol>
+            <h3>Como interpretar o resultado</h3>
+            <ul>
+              <li>Um único ótimo, achado por quase todas as partidas, é provavelmente o melhor da faixa. Vários ótimos distintos pedem comparação: o melhor em número pode ser o mais sensível a erros de construção.</li>
+              <li>Partidas que terminam em designs que falham ou rendem menos da metade do melhor são omitidas e contadas na mensagem de estado.</li>
+              <li>Se o melhor valor de uma variável encosta no limite do controle, a busca queria ir além: relaxe outra variável ou aumente o total do braço.</li>
+              <li>Um ótimo que raspa o contrapeso no chão ou exige proporções extremas pode não ser construível. Confira no disparo animado antes de confiar nele.</li>
+            </ul>
+            <h3>Varredura</h3>
+            <p>Enquanto o otimizador <i>procura</i>, a varredura <i>desenha o terreno</i>. Escolha o <b>Eixo X</b> (e, se quiser um mapa, o <b>Eixo Y</b>) e clique em <b>Varrer</b>. Com dois eixos você vê um mapa de calor de 16 × 12 pontos; com um só, uma curva de 40 pontos. A faixa vai de 40% a 160% do valor atual (o ângulo vai de 5° a 85°). O contorno marca o melhor ponto, o círculo marca o seu design, e um clique numa célula aplica aqueles valores. Use a varredura para ver se existem vários vales ou se o melhor ponto está numa borda.</p>
+            <button class="ghost">Fechar</button>
+          </form>
+        </dialog>
+      </div>
+      <div id="free-panel" hidden>
+        <div id="tools"></div>
+        <p id="free-status" class="muted"></p>
+        <div id="free-props"></div>
+        <p class="row"><button class="ghost" id="fit">Enquadrar desenho</button><button class="ghost" id="new-sketch">Novo esboço vazio</button></p>
+      </div>
+      <div class="row">
+        <button id="run">Disparar</button>
+        <select id="speed" aria-label="Velocidade da animação"><option value="1">1×</option><option value="0.25" selected>¼× câmera lenta</option><option value="0.1">⅒×</option></select>
+      </div>
+      <p id="err" role="alert"></p>
+      <fieldset>
+        <legend>Designs</legend>
+        <div class="row"><input type="text" id="name" placeholder="Nome do design…" autocomplete="off" name="design-name" spellcheck="false" aria-label="Nome do design"><button id="save">Salvar</button></div>
+        <div class="row"><select id="saved" aria-label="Designs salvos"></select><button class="ghost" id="delete">Apagar</button></div>
+        <div class="row">
+          <button class="ghost" id="export">Exportar JSON</button>
+          <label class="file">Importar JSON<input type="file" id="import" accept=".json,application/json"></label>
+          <button class="ghost" id="csv">Dados (CSV)</button>
+        </div>
+      </fieldset>
+    </aside>
+    <section>
+      <canvas id="machine" role="img" aria-label="Desenho da máquina e animação do disparo" height="440"></canvas>
+      <div id="stats" role="region" aria-label="Resultados do disparo" aria-live="polite"></div>
+      <div id="physics"></div>
+      <div class="charts">
+        <canvas id="chart-energy" role="img" aria-label="Gráfico de energia cinética ao longo do tempo" height="200"></canvas>
+        <canvas id="chart-speed" role="img" aria-label="Gráfico da velocidade do projétil" height="200"></canvas>
+        <canvas id="chart-force" role="img" aria-label="Gráfico das forças de reação" height="200"></canvas>
+      </div>
+      <details id="data-table" hidden><summary>Ver dados dos gráficos (tabela)</summary><div class="scroll"></div></details>
+      <canvas id="sweep" role="img" aria-label="Mapa de calor da varredura de parâmetros" height="320" hidden></canvas>
+      <canvas id="flight" role="img" aria-label="Trajetória do projétil no voo" height="200"></canvas>
+    </section>
+  </main>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

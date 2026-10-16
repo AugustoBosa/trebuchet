@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#1d1a16" media="(prefers-color-scheme: dark)" />
+  <meta name="theme-color" content="#f4efe4" media="(prefers-color-scheme: light)" />
+  <title>A Física do Trebuchet</title>
+  <style>
+    :root {
+      color-scheme: light dark; /* native controls (select popups, scrollbars) follow the theme */
+      --bg: #f4efe4; --ink: #2b2620; --muted: #6b6052; --accent: #a0412d; --line: #d8cdb8; --field: #8c8070; --panel: #ebe4d5;
+      --series-1: #2a78d6; --series-2: #d4521f; --series-3: #0f8a5f; --good: #1d7a4d; --bad: #a0412d;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1d1a16; --ink: #ece4d4; --muted: #a39887; --accent: #e07a5f; --line: #3a342c; --field: #7f7565; --panel: #26221d;
+        --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --good: #4fc08d; --bad: #e07a5f;
+      }
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.65 Georgia, 'Times New Roman', serif; }
+    a { color: var(--accent); }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    h1, h2, h3 { text-wrap: balance; scroll-margin-top: 16px; }
+    p, li { text-wrap: pretty; }
+
+    /* page shell: sticky index on the left, content uses the remaining width */
+    .shell { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 40px; max-width: 1760px; margin: auto; padding: 0 28px; }
+    .toc { position: sticky; top: 0; align-self: start; max-height: 100vh; overflow: auto; padding: 24px 0; font: 14px/1.35 system-ui, sans-serif; }
+    .toc a { display: block; padding: 5px 10px; border-left: 2px solid var(--line); color: var(--muted); text-decoration: none; }
+    .toc a:hover { color: var(--ink); }
+    .toc a[aria-current] { color: var(--ink); border-left-color: var(--accent); font-weight: 600; }
+    .toc .back { border: 0; padding: 0 0 14px; color: var(--accent); font-weight: 600; }
+    .toc h2 { font: 600 11px system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 18px 0 6px; border: 0; padding: 0; }
+    .toc .sub a { font-size: 13px; padding-left: 20px; }
+    main { min-width: 0; padding-bottom: 96px; }
+
+    .hero { padding: 32px 0 8px; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 32px; align-items: center; }
+    h1 { font-size: clamp(32px, 4vw, 52px); line-height: 1.1; margin: 0 0 12px; }
+    .lede { font-size: 22px; color: var(--muted); margin: 0; max-width: 40ch; }
+    .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 22px; font-family: system-ui, sans-serif; }
+    .fact { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--panel); }
+    .fact b { display: block; font-size: 26px; font-variant-numeric: tabular-nums; line-height: 1.1; }
+    .fact span { font-size: 12px; line-height: 1.35; color: var(--muted); display: block; }
+
+    /* a section = heading + text column + figure column */
+    .sec { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 48px; border-top: 1px solid var(--line); margin-top: 56px; padding-top: 28px; }
+    .sec > h2 { grid-column: 1 / -1; font-size: 30px; margin: 0 0 8px; }
+    .sec h3 { font-size: 20px; margin: 24px 0 4px; }
+    .txt { max-width: 74ch; }
+    .fig { align-self: start; position: sticky; top: 16px; }
+    .full { grid-column: 1 / -1; }
+    .cols2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 48px; }
+    .tex { overflow-x: auto; overflow-y: hidden; padding: 4px 0; }
+    .note { font: 15px/1.5 system-ui, sans-serif; color: var(--muted); border-left: 3px solid var(--line); padding-left: 12px; }
+    table { border-collapse: collapse; width: 100%; font: 15px/1.4 system-ui, sans-serif; }
+    td, th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    ol li, ul li { margin: 6px 0; }
+
+    figure { margin: 0; }
+    figcaption { font: 13px/1.4 system-ui, sans-serif; color: var(--muted); margin-top: 6px; }
+    .svg { width: 100%; height: auto; display: block; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+    .svg text { font: 12px system-ui, sans-serif; fill: var(--ink); }
+    .svg .m { fill: var(--muted); }
+    .svg .ln { stroke: var(--ink); stroke-width: 4; stroke-linecap: round; fill: none; }
+    .svg .th { stroke: var(--muted); stroke-width: 2; fill: none; }
+    .svg .dash { stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 4 4; fill: none; }
+    .svg .ac { fill: var(--accent); stroke: none; }
+    .svg .acs { stroke: var(--accent); stroke-width: 2; fill: none; }
+    .svg .box { fill: var(--panel); stroke: var(--ink); stroke-width: 2; }
+    .svg .dot { fill: var(--bg); stroke: var(--accent); stroke-width: 2; }
+
+    .mini, .compare, .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; font: 14px system-ui, sans-serif; }
+    .mini canvas, .panel canvas { width: 100%; display: block; border-radius: 6px; margin-bottom: 8px; }
+    .mini canvas.m { cursor: pointer; }
+    .ctl { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 4px 16px; }
+    .ctl label { display: grid; grid-template-columns: 1fr auto; font-size: 13px; }
+    .ctl input { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); }
+    .ctl output { font-variant-numeric: tabular-nums; font-weight: 600; }
+    .out { margin: 8px 0 0; font-size: 15px; }
+    .bars { margin-top: 12px; }
+    .bar { display: grid; grid-template-columns: 170px 1fr; gap: 2px 12px; align-items: center; margin: 8px 0; }
+    .bar span:last-child { grid-column: 2; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .track { background: var(--bg); border-radius: 4px; height: 14px; }
+    .track div { background: var(--series-1); height: 100%; border-radius: 4px; transition: width .3s; }
+
+    .story { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
+    .story figure { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px; }
+    .story canvas { width: 100%; display: block; }
+    .story b { font: 600 13px system-ui, sans-serif; }
+
+    /* per-model sections */
+    .models { grid-column: 1 / -1; }
+    .model { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 48px; border-top: 1px solid var(--line); margin-top: 40px; padding-top: 24px; }
+    .model > header { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+    .model h3 { margin: 0; font-size: 26px; }
+    .chip { font: 12px system-ui, sans-serif; color: var(--muted); border: 1px solid var(--line); border-radius: 99px; padding: 2px 10px; }
+    .model .txt p { margin-top: 0; }
+    .pc { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font: 14px/1.45 system-ui, sans-serif; }
+    .pc > div { border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
+    .pc h4 { margin: 0 0 4px; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; }
+    .pc .pro h4 { color: var(--good); }
+    .pc .con h4 { color: var(--bad); }
+    .pc ul { margin: 0; padding-left: 18px; }
+    .open { display: inline-block; margin-top: 12px; font: 600 14px system-ui, sans-serif; }
+
+    @media (pointer: coarse) { .ctl input[type=range] { min-height: 32px; } .toc a { padding: 10px; } }
+    @media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
+    @media (max-width: 1180px) {
+      .shell { grid-template-columns: minmax(0, 1fr); gap: 0; padding: 0 16px; }
+      .toc { position: sticky; z-index: 2; max-height: none; display: flex; gap: 6px; overflow-x: auto; padding: 10px 0; background: var(--bg); border-bottom: 1px solid var(--line); white-space: nowrap; }
+      .toc a { border: 1px solid var(--line); border-radius: 99px; padding: 4px 12px; }
+      .toc a[aria-current] { border-color: var(--accent); }
+      .toc h2, .toc .sub { display: none; }
+      .hero, .sec, .model { grid-template-columns: minmax(0, 1fr); }
+      .fig { position: static; margin: 12px 0 8px; }
+      .cols2 { grid-template-columns: minmax(0, 1fr); }
+    }
+    @media (max-width: 600px) { .bar { grid-template-columns: 1fr; } .bar span:last-child { grid-column: 1; } .pc { grid-template-columns: 1fr; } .lede { font-size: 19px; } }
+  </style>
+</head>
+<body>
+<div class="shell">
+  <nav class="toc" id="toc" aria-label="Índice"><a class="back" href="./">← Laboratório</a></nav>
+
+  <main>
+    <header class="hero">
+      <div>
+        <h1>A física do trebuchet</h1>
+        <p class="lede">Como uma alavanca, uma corda e uma pedra pesada transformam altura em alcance, e por que levou mil anos para acertar o projeto.</p>
+        <div class="facts">
+          <div class="fact"><b>13 modelos</b><span>simulados no laboratório</span></div>
+          <div class="fact"><b>400 m</b><span>teto ideal com M/m = 100 e queda de 2 m</span></div>
+          <div class="fact"><b>~56 %</b><span>eficiência do contrapeso fixo padrão</span></div>
+          <div class="fact"><b>0,1 ms</b><span>passo de integração Runge–Kutta</span></div>
+        </div>
+      </div>
+      <figure>
+        <div class="mini" data-kind="hinged" data-fields="slingLength,releaseDeg" data-chart></div>
+        <figcaption>Contrapeso articulado em câmera lenta. Mude a funda ou o ângulo e solte o slider para ver o disparo de novo.</figcaption>
+      </figure>
+    </header>
+
+    <section class="sec" id="historia">
+      <h2>1. Uma máquina de mil anos</h2>
+      <div class="txt">
+        <p>O trebuchet começou como uma máquina de <b>tração</b>: uma viga sobre um eixo, com uma funda numa ponta e cordas na outra, puxadas de uma vez por uma equipe. Textos chineses dos séculos IV–III a.C. já descrevem máquinas assim. A técnica atravessou a Ásia e chegou ao Mediterrâneo por volta do século VI, em cercos bizantinos e ávaros.</p>
+        <p>A grande virada veio no século XII, no Mediterrâneo oriental, quando as equipes foram trocadas por um <b>contrapeso</b>: uma caixa com toneladas de terra ou pedras. A energia deixou de depender do braço humano, e projéteis de dezenas a mais de cem quilos passaram a voar centenas de metros. Um tratado escrito para Saladino por volta de 1187 traz uma das primeiras descrições claras. Em 1268–1273, no cerco de Xiangyang, os mongóis de Kublai Khan usaram trebuchets de contrapeso construídos por engenheiros muçulmanos. Em 1304, Eduardo I da Inglaterra ergueu diante do Castelo de Stirling o famoso <i>Warwolf</i>. A artilharia de pólvora aposentou a máquina ao longo do século XV.</p>
+        <p class="note">O que importa para nós: o trebuchet é um problema de engenharia puro. Uma fonte de energia fixa (o contrapeso caindo uma certa altura) e a pergunta de como entregar o máximo dela ao projétil.</p>
+      </div>
+      <figure class="fig">
+        <svg class="svg" id="tl-svg" viewBox="0 0 560 360" role="img" aria-label="Linha do tempo: tração na China (séc. IV a.C.), Mediterrâneo (séc. VI), contrapeso (séc. XII), tratado de Saladino (1187), Xiangyang (1268–73), Warwolf em Stirling (1304) e pólvora (séc. XV)"></svg>
+        <figcaption>Linha do tempo (sem escala). Cada marco troca a fonte de energia ou o alvo do projeto.</figcaption>
+      </figure>
+    </section>
+
+    <section class="sec" id="principio">
+      <h2>2. O princípio: trocar altura por velocidade</h2>
+      <div class="txt">
+        <p>Ao cair uma altura <span class="itex">\Delta h</span>, o contrapeso de massa <span class="itex">M</span> libera a energia</p>
+        <div class="tex">E = M\,g\,\Delta h .</div>
+        <p>Se toda ela virasse energia cinética do projétil de massa <span class="itex">m</span>, lançado do chão a 45° e sem ar, o alcance seria <span class="itex">R = v^2/g</span>, com <span class="itex">\tfrac12 m v^2 = E</span>:</p>
+        <div class="tex">R_{\text{ideal}} = \frac{2E}{m\,g} = 2\,\Delta h\,\frac{M}{m}.</div>
+        <p>É o teto absoluto. Com <span class="itex">M/m = 100</span> e queda de 2 m, ele dá 400 m. A <b>eficiência</b> mede quanto desse teto chega de fato ao projétil no instante da soltura:</p>
+        <div class="tex">\eta = \frac{\tfrac12 m v^2 + m g\,\Delta h_p}{M g\,\Delta h}.</div>
+        <p>A energia que não chega ao projétil fica no balanço do contrapeso, na rotação do braço e, numa parte pequena, no atrito e no ar. Quase toda a história da evolução do trebuchet é uma briga para aumentar <span class="itex">\eta</span>.</p>
+        <h3>Por que mais contrapeso rende cada vez menos</h3>
+        <p>Considere a versão mais simples: uma alavanca rígida e sem massa, com o contrapeso a uma distância <span class="itex">L_2</span> do eixo e o projétil preso na ponta, a <span class="itex">L_1</span>. Chamando de <span class="itex">\mu = M/m</span> a razão de massas e de <span class="itex">\rho = L_1/L_2</span> a razão de braços, a conservação de energia dá</p>
+        <div class="tex">v^2 = \underbrace{2 g L_2\,\Delta s}_{v_{\text{queda}}^2}\;\rho^2\,\frac{\mu - \rho}{\mu + \rho^2},</div>
+        <p>em que <span class="itex">v_{\text{queda}}</span> é a velocidade que o contrapeso teria em queda livre e <span class="itex">\Delta s</span> é a variação de <span class="itex">\sin\theta</span> no giro. Quando <span class="itex">\mu \to \infty</span>, a fração tende a 1 e <span class="itex">v \to \rho\, v_{\text{queda}}</span>: o projétil nunca anda mais rápido que a razão de braços vezes a queda livre do contrapeso. Dobrar um contrapeso que já é enorme quase não muda nada. O ganho de verdade está na <b>geometria</b>.</p>
+      </div>
+      <div class="fig">
+        <figure>
+          <svg class="svg" viewBox="0 0 520 300" role="img" aria-label="Anatomia de um trebuchet de contrapeso: estrutura em A, eixo, braço longo com a funda e o projétil, braço curto com o contrapeso">
+            <line class="th" x1="20" y1="270" x2="500" y2="270"/>
+            <path class="th" d="M200 270 L250 110 L300 270" stroke-width="5"/>
+            <line class="ln" x1="110" y1="236" x2="285" y2="79"/>
+            <rect class="box" x="270" y="76" width="44" height="40" rx="3"/>
+            <text x="292" y="101" text-anchor="middle">M</text>
+            <path class="acs" d="M110 236 Q70 262 62 262"/>
+            <circle class="ac" cx="60" cy="262" r="9"/>
+            <circle class="dot" cx="250" cy="110" r="6"/>
+            <text x="262" y="150" class="m">eixo</text>
+            <text x="150" y="138" class="m" transform="rotate(-42 150 138)">braço longo L₁</text>
+            <text x="318" y="64" class="m">braço curto L₂</text>
+            <text x="324" y="104">contrapeso</text>
+            <text x="22" y="236" class="m">funda</text>
+            <text x="20" y="290">projétil m</text>
+            <text x="330" y="262" class="m">estrutura em A</text>
+            <path class="dash" d="M322 96 V250 M314 250 H322"/>
+            <text x="330" y="184">Δh</text>
+          </svg>
+          <figcaption>Anatomia de um trebuchet de contrapeso fixo, armado. A queda Δh do contrapeso é a fonte de toda a energia.</figcaption>
+        </figure>
+        <figure style="margin-top:16px">
+          <div class="panel"><canvas id="returns" height="260" role="img" aria-label="Gráfico: velocidade do projétil relativa à queda livre em função da razão de massas, para três razões de braços"></canvas>
+          <p class="out" id="returns-out">Passe o mouse sobre o gráfico.</p></div>
+          <figcaption>Retorno decrescente: depois de M/m ≈ 100 a curva praticamente achata. O que muda a altura da curva é a razão de braços ρ.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="sec" id="fases">
+      <h2>3. As quatro fases do disparo</h2>
+      <div class="txt">
+        <ol>
+          <li><b>Arrasto na calha.</b> O contrapeso começa a cair, o braço gira, e a funda arrasta o projétil <i>para trás</i>, deslizando numa calha sob a máquina.</li>
+          <li><b>Giro da funda.</b> O projétil levanta e a funda passa a girar em torno da ponta do braço como um segundo pêndulo. É o efeito chicote: a ponta do braço desacelera enquanto a funda acelera.</li>
+          <li><b>Liberação.</b> Um anel na ponta da funda escorrega de um pino no braço quando a funda atinge certo ângulo. A forma do pino define o momento. No simulador, a soltura acontece quando a velocidade do projétil aponta para o ângulo escolhido.</li>
+          <li><b>Voo balístico.</b> Daí em diante só agem a gravidade e o ar.</li>
+        </ol>
+        <p>No gráfico, veja a energia passando do contrapeso (laranja) para o projétil (azul). Mude a funda e o ângulo, solte o slider, e o disparo se repete. Clique no desenho para repetir.</p>
+      </div>
+      <div class="fig"><div class="mini" data-kind="fixed" data-fields="slingLength,releaseDeg" data-chart></div></div>
+      <div class="full" style="margin-top:20px">
+        <div class="story" id="story" aria-label="Quadros do disparo"></div>
+        <p class="note">Quadros reais da simulação do contrapeso fixo padrão, do armado ao voo.</p>
+      </div>
+    </section>
+
+    <section class="sec" id="lagrange">
+      <h2>4. Equações de movimento (Lagrange)</h2>
+      <div class="txt">
+        <p>Trebuchets são sistemas de corpos rígidos ligados por juntas, o terreno natural da mecânica de Lagrange: escolhemos coordenadas que já respeitam as ligações, escrevemos a energia cinética <span class="itex">T</span> e a potencial <span class="itex">V</span>, e as equações saem de</p>
+        <div class="tex">\frac{d}{dt}\frac{\partial \mathcal{L}}{\partial \dot q_k} - \frac{\partial \mathcal{L}}{\partial q_k} = 0, \qquad \mathcal{L} = T - V.</div>
+      </div>
+      <figure class="fig">
+        <svg class="svg" viewBox="0 0 420 260" role="img" aria-label="Coordenadas: ângulo θ do braço longo com a horizontal e ângulo ψ da funda de comprimento Ls">
+          <line class="dash" x1="30" y1="170" x2="400" y2="170"/>
+          <line class="dash" x1="283" y1="84" x2="400" y2="84"/>
+          <line class="ln" x1="160" y1="170" x2="283" y2="84"/>
+          <line class="ln" x1="160" y1="170" x2="132" y2="190" style="stroke-width:6"/>
+          <line class="acs" x1="283" y1="84" x2="333" y2="171"/>
+          <circle class="dot" cx="160" cy="170" r="6"/>
+          <circle class="ac" cx="333" cy="171" r="10"/>
+          <path class="th" d="M215 170 A55 55 0 0 0 204 138"/>
+          <path class="th" d="M283 124 A40 40 0 0 1 307 118"/>
+          <text x="222" y="160">θ</text><text x="300" y="136">ψ</text>
+          <text x="205" y="112" class="m" transform="rotate(-35 205 112)">L₁</text>
+          <text x="322" y="120" class="m">L_s</text>
+          <text x="347" y="176">m</text>
+          <text x="120" y="212" class="m">M, L₂</text>
+          <text x="164" y="190" class="m">O</text>
+        </svg>
+        <figcaption>Coordenadas generalizadas do trebuchet com funda: θ gira o braço, ψ gira a funda.</figcaption>
+      </figure>
+      <div class="full cols2">
+        <div class="txt">
+          <h3>Alavanca rígida (sem funda)</h3>
+          <p>Uma coordenada só: o ângulo <span class="itex">\theta</span> do braço longo com a horizontal. O braço tem massa <span class="itex">m_b</span>, comprimento <span class="itex">L_1+L_2</span> e centro de massa a <span class="itex">d = (L_1-L_2)/2</span> do eixo. Então</p>
+          <div class="tex">T = \tfrac12 I_O\,\dot\theta^2, \qquad I_O = M L_2^2 + m L_1^2 + m_b\!\left(\tfrac{(L_1+L_2)^2}{12} + d^2\right),</div>
+          <div class="tex">V = g\,\sin\theta\,\big(m L_1 + m_b d - M L_2\big),</div>
+          <div class="tex">\boxed{\,I_O\,\ddot\theta = -g\cos\theta\,\big(m L_1 + m_b d - M L_2\big)\,}</div>
+          <p>Repare no <span class="itex">m_b d^2</span> e no <span class="itex">m_b (L_1+L_2)^2/12</span> dentro de <span class="itex">I_O</span>: toda massa do braço longe do eixo é inércia que o contrapeso precisa acelerar sem nenhum retorno. Daí a regra de braços leves e afinados na ponta.</p>
+        </div>
+        <div class="txt">
+          <h3>Com funda: dois graus de liberdade acoplados</h3>
+          <p>Agora o projétil pende de uma funda de comprimento <span class="itex">L_s</span> com ângulo absoluto <span class="itex">\psi</span>. Sua posição é</p>
+          <div class="tex">\mathbf{p} = L_1(\cos\theta, \sin\theta) + L_s(\cos\psi, \sin\psi),</div>
+          <div class="tex">|\dot{\mathbf p}|^2 = L_1^2\dot\theta^2 + L_s^2\dot\psi^2 + 2L_1L_s\,\dot\theta\dot\psi\cos(\theta-\psi).</div>
+          <p>Com <span class="itex">I_O</span> agora sem o termo do projétil, e abreviando <span class="itex">c = \cos(\theta-\psi)</span>, <span class="itex">s = \sin(\theta-\psi)</span> e <span class="itex">K = m_b d - M L_2 + m L_1</span>, as equações de Lagrange dão o sistema acoplado</p>
+          <div class="tex">\begin{aligned}
+(I_O + m L_1^2)\,\ddot\theta + m L_1 L_s\,(c\,\ddot\psi + s\,\dot\psi^2) &= -g K\cos\theta\\
+m L_s^2\,\ddot\psi + m L_1 L_s\,(c\,\ddot\theta - s\,\dot\theta^2) &= -m g L_s\cos\psi
+\end{aligned}</div>
+          <p>Os termos com <span class="itex">\dot\theta^2</span> e <span class="itex">\dot\psi^2</span> são a força centrífuga de um corpo sobre o outro. É por eles que a energia escoa do braço para a funda: o chicote. Na fase da calha, a restrição <span class="itex">y_p = r</span> entra com um multiplicador <span class="itex">N \ge 0</span> (a força normal). O projétil decola quando <span class="itex">N</span> teria que ficar negativo.</p>
+          <p class="note">Verificação: as duas equações acima foram conferidas contra o motor do simulador. As acelerações batem até a 6ª casa decimal (arquivo <code>test/lagrange.test.ts</code>).</p>
+        </div>
+      </div>
+      <div class="full txt" style="max-width:none">
+        <h3>Por que o simulador não usa essas equações</h3>
+        <p style="max-width:120ch">Cada variante pede uma nova derivação: o contrapeso articulado acrescenta um terceiro ângulo, e o floating arm troca o eixo fixo por um trilho. Por isso o simulador usa o método geral das <b>coordenadas máximas</b>: cada corpo tem <span class="itex">(x, y, \theta)</span>, e cada junta é uma restrição <span class="itex">C(\mathbf q) = 0</span>. As equações viram</p>
+        <div class="tex">\mathbf M\,\ddot{\mathbf q} = \mathbf F + \mathbf J^{\mathsf T}\boldsymbol\lambda, \qquad \mathbf J\,\ddot{\mathbf q} = -\dot{\mathbf J}\,\dot{\mathbf q} - 2\alpha\,\dot{\mathbf C} - \beta^2\mathbf C,</div>
+        <p style="max-width:120ch">em que <span class="itex">\mathbf J = \partial \mathbf C/\partial \mathbf q</span> e os multiplicadores <span class="itex">\boldsymbol\lambda</span> são exatamente as <b>forças de reação</b> nas juntas: a carga no eixo e a tração na funda, de graça. Os termos com <span class="itex">\alpha, \beta</span> (estabilização de Baumgarte) corrigem a deriva numérica. A integração usa Runge–Kutta de 4ª ordem com passo de 0,1 ms.</p>
+      </div>
+    </section>
+
+    <section class="sec" id="voo">
+      <h2>5. O voo, com ar</h2>
+      <div class="txt">
+        <p>Depois da soltura, o projétil é um ponto sob gravidade e arrasto quadrático:</p>
+        <div class="tex">m\,\dot{\mathbf v} = -m g\,\hat{\mathbf y} - \tfrac12\rho\,C_d A\,|\mathbf v|\,\mathbf v.</div>
+        <p>Não há solução fechada, então o simulador integra numericamente. Uma escala útil é a velocidade terminal <span class="itex">v_t = \sqrt{2mg/(\rho C_d A)}</span>. Para uma pedra de 10 kg com 20 cm de diâmetro, <span class="itex">v_t \approx 104</span> m/s. Saindo a 45 m/s, o ar já come cerca de 15% do alcance. Por isso, com ar e soltura alta, o ângulo ótimo fica abaixo de 45°: o otimizador do laboratório acha cerca de 36°.</p>
+      </div>
+      <div class="fig">
+        <div class="panel">
+          <canvas id="air" height="260" role="img" aria-label="Trajetórias do projétil com e sem ar"></canvas>
+          <div class="ctl" id="air-ctl"></div>
+          <p class="out" id="air-out"></p>
+        </div>
+        <figcaption>Pedra de 10 kg, 20 cm de diâmetro, lançada do chão. Tracejado: sem ar. Linha cheia: com arrasto.</figcaption>
+      </div>
+    </section>
+
+    <section class="sec" id="articulado">
+      <h2>6. Por que o contrapeso articulado venceu</h2>
+      <div class="txt">
+        <p>No contrapeso fixo, a massa descreve um arco e chega ao fundo ainda balançando para a frente. Essa energia horizontal é desperdiçada. Pendurado numa articulação, o contrapeso cai quase na vertical e entrega mais ao braço. O <b>floating arm</b>, moderno, leva a ideia ao extremo: guia vertical para o contrapeso e eixo rolando num trilho. Compare os tipos com os mesmos parâmetros:</p>
+        <p>O <b>MURLIN</b> e a <b>roda</b> atacam a mesma perda por outro caminho: a corda do contrapeso desenrola de um tambor cujo raio <span class="itex">r(\varphi)</span> diminui ao longo do giro. A velocidade do contrapeso é <span class="itex">v = r\,\omega</span>: no início o raio grande dá torque <span class="itex">T r</span> para arrancar o braço; no fim, com <span class="itex">r</span> pequeno, o braço gira rápido enquanto o contrapeso quase para, e a energia cinética que sobraria nele, <span class="itex">\tfrac12 M r^2\omega^2</span>, vai para o braço. É um câmbio contínuo. No simulador, a queda é <span class="itex">\Delta y = \int r\,d\varphi</span>, uma única restrição entre a altura do contrapeso e o ângulo do braço.</p>
+        <p class="note">Repare na última coluna: o articulado ganha em alcance, mas a parada brusca do balanço produz picos de força no eixo muito maiores. Para quem constrói um de verdade, isso é dimensionamento estrutural.</p>
+      </div>
+      <div class="fig"><div class="compare" data-kinds="fixed,hinged,floating" data-fields="cwMass,projMass,longArm,slingLength"></div></div>
+    </section>
+
+    <section class="sec" id="variaveis">
+      <h2>7. As variáveis que importam</h2>
+      <div class="full">
+        <table>
+          <tr><th>Variável</th><th>Efeito</th><th>Regra prática</th></tr>
+          <tr><td>Razão de massas <span class="itex">M/m</span></td><td>Energia disponível por kg de projétil, com retorno decrescente.</td><td>~50 a 150</td></tr>
+          <tr><td>Razão de braços <span class="itex">L_1/L_2</span></td><td>Multiplica a velocidade, mas reduz a força. Existe um ótimo para cada <span class="itex">M/m</span>.</td><td>~3 a 6</td></tr>
+          <tr><td>Funda <span class="itex">L_s</span></td><td>Segundo estágio da alavanca e chicote.</td><td>próxima do braço longo</td></tr>
+          <tr><td>Ângulo de liberação</td><td>Define a direção de saída.</td><td>~35–45°, menos com ar e altura</td></tr>
+          <tr><td>Massa do braço</td><td>Inércia sem retorno.</td><td>a menor possível com rigidez</td></tr>
+          <tr><td>Tipo de contrapeso</td><td>Arco (fixo) contra queda vertical (articulado, floating arm).</td><td>articulado ou guiado</td></tr>
+        </table>
+        <p class="note">As faixas são indicativas, não leis. O ótimo depende do conjunto, e é para isso que serve o otimizador.</p>
+      </div>
+    </section>
+
+    <section class="sec" id="otimizacao">
+      <h2>8. Otimizando</h2>
+      <div class="txt">
+        <p>O alcance é uma função de muitas variáveis sem fórmula fechada, só uma simulação para cada ponto. Para isso servem métodos <b>sem derivadas</b>. O laboratório usa o <b>Nelder–Mead</b>: um simplex, que é um triângulo no caso de duas variáveis, se reflete, expande e contrai rumo ao melhor ponto, usando apenas comparações de valores. Ele acha um <b>ótimo local</b>, então vale partir de pontos diferentes e comparar.</p>
+        <p>A <b>varredura</b> faz o oposto: em vez de procurar, desenha o terreno. No mapa de calor de funda × ângulo, a região boa é inclinada: no contrapeso fixo padrão, o melhor ângulo cai de ~40° com funda de 3 m para ~36° com 4,5 m e ~34° com 6 m. Com 7,5 m, o disparo colapsa para menos de 30 m. As variáveis interagem, e é por isso que otimizar uma de cada vez costuma falhar.</p>
+        <p><a href="./">Abra o laboratório</a>, escolha um tipo e use os painéis "Otimizar" e "Varredura". Ou desenhe sua própria máquina no editor livre.</p>
+      </div>
+      <figure class="fig">
+        <div class="panel"><canvas id="heat" height="340" role="img" aria-label="Mapa de calor do alcance do contrapeso fixo em função do comprimento da funda e do ângulo de liberação"></canvas>
+        <p class="out" id="heat-out" role="status">Calculando 81 simulações…</p></div>
+        <figcaption>Mapa de calor real: alcance do contrapeso fixo padrão por funda × ângulo de liberação. O contorno marca o melhor ponto; o círculo, o ajuste padrão.</figcaption>
+      </figure>
+    </section>
+
+    <section class="sec" id="modelos">
+      <h2>9. Os modelos do laboratório</h2>
+      <div class="txt">
+        <p>Cada modelo abaixo é o mesmo simulador com uma geometria diferente, partindo dos ajustes padrão do laboratório. Compare com cuidado: o alcance também depende do tamanho da máquina (o Walking arm é uma máquina de bancada, os outros têm braços de 2 a 5 m).</p>
+      </div>
+      <div class="fig panel" style="position:static">
+        <div class="bars" id="rank" aria-live="polite">Calculando…</div>
+      </div>
+      <div class="models" id="models"></div>
+    </section>
+
+    <section class="sec" id="referencias">
+      <h2>Referências</h2>
+      <div class="full">
+        <ul>
+          <li>Chevedden, P. E., Eigenbrod, L., Foley, V., Soedel, W. "The Trebuchet". <i>Scientific American</i>, julho de 1995.</li>
+          <li>Siano, D. B. <i>Trebuchet Mechanics</i>, 2001: modelo lagrangiano detalhado dos tipos clássicos.</li>
+          <li><a href="https://arxiv.org/html/2510.18789v1">"The swinging counterweight trebuchet"</a>, arXiv:2510.18789.</li>
+          <li><a href="https://en.wikipedia.org/wiki/Floating_arm_trebuchet">Floating arm trebuchet</a>, Wikipédia.</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+</div>
+<script type="module" src="/src/learn.ts"></script>
+</body>
+</html>
