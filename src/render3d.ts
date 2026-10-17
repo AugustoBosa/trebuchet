@@ -9,6 +9,7 @@ import { twist } from './physics3d/constraints3';
 import { add, rotate, type BodyRef, type Mechanism3, type V3 } from './physics3d/model3';
 import type { Result3 } from './physics3d/solver3';
 import type { Scatter } from './physics3d/dispersion';
+import type { Sketch } from './sketch';
 import type { Bounds } from './render';
 
 const X = new THREE.Vector3(1, 0, 0);
@@ -75,10 +76,30 @@ export function createView3d(canvas: HTMLCanvasElement) {
     render();
   };
   const ray = new THREE.Raycaster();
+  // building tools: a click lands on the work plane z = pickZ (snapped to a node within 12 px, else to the 5 cm grid)
+  let pick: ((p: V3) => void) | undefined;
+  let pickZ = 0;
+  const planeGrid = new THREE.GridHelper(1, 1);
+  planeGrid.visible = false;
+  const marker = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8), new THREE.MeshBasicMaterial({ depthTest: false }));
+  marker.visible = false;
+  marker.renderOrder = 2;
+  scene.add(planeGrid, marker);
   canvas.addEventListener('pointerdown', (e) => {
-    if (!handles.length || tc.axis) return; // on the gizmo: TransformControls handles it
     const rc = canvas.getBoundingClientRect();
-    ray.setFromCamera(new THREE.Vector2(((e.clientX - rc.left) / rc.width) * 2 - 1, -((e.clientY - rc.top) / rc.height) * 2 + 1), camera);
+    const ndc = new THREE.Vector2(((e.clientX - rc.left) / rc.width) * 2 - 1, -((e.clientY - rc.top) / rc.height) * 2 + 1);
+    ray.setFromCamera(ndc, camera);
+    if (pick && e.button === 0) {
+      const near = handles.find((h) => {
+        const s = new THREE.Vector3(...h.p).applyMatrix4(handleRoot.matrixWorld).project(camera);
+        return Math.hypot(((s.x - ndc.x) * rc.width) / 2, ((s.y - ndc.y) * rc.height) / 2) < 12;
+      });
+      if (near) return pick(near.p);
+      const hit = ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 0, 1), -pickZ), new THREE.Vector3());
+      if (hit) pick([Math.round(hit.x / 0.05) * 0.05, Math.max(0, Math.round(hit.y / 0.05) * 0.05), pickZ]);
+      return;
+    }
+    if (!handles.length || tc.axis) return; // on the gizmo: TransformControls handles it
     const hit = ray.intersectObjects(nodeGroup.children)[0];
     if (hit) select(nodeGroup.children.indexOf(hit.object));
   });
@@ -259,7 +280,7 @@ export function createView3d(canvas: HTMLCanvasElement) {
     // The machine's solid parts in its cocked pose (stone in place), for CAD or a 3D printer: glTF binary in meters,
     // or binary STL in millimeters (STL has no units; CAD and slicers read mm). Ropes, flight path, grid, nodes left out.
     async exportModel(format: 'glb' | 'stl'): Promise<Blob | undefined> {
-      if (!built) return undefined;
+      if (!built?.r) return undefined; // a sketch still being built has no machine to export
       built.update(built.r.frames[0].q, 0);
       built.machine.updateMatrixWorld(true);
       const solid = new THREE.Group();
@@ -280,6 +301,64 @@ export function createView3d(canvas: HTMLCanvasElement) {
       }
       const glb = await new GLTFExporter().parseAsync(solid, { binary: true });
       return new Blob([glb as ArrayBuffer], { type: 'model/gltf-binary' });
+    },
+    // A sketch that doesn't compile yet (still being built): its parts as drawn, no physics.
+    drawSketch(sk: Sketch, b: Bounds) {
+      if (built) scene.remove(built.group), built.group.traverse((o) => (o as THREE.Mesh).geometry?.dispose()), (built = undefined);
+      const span = b.x1 - b.x0, th = 0.012 * span;
+      const group = new THREE.Group();
+      const z = (o: { z?: Partial<Record<string, number>> }, k: string) => o.z?.[k] ?? 0;
+      for (const bd of sk.bodies) {
+        if (bd.kind === 'rod') beam([bd.a[0], bd.a[1], z(bd, 'a')], [bd.b[0], bd.b[1], z(bd, 'b')], 1.4 * th, solid.ink, group);
+        else {
+          const s = new THREE.Mesh(new THREE.SphereGeometry(bd.r, 20, 14), bd.role === 'projectile' ? solid.accent : solid.ink);
+          s.position.set(bd.c[0], bd.c[1], z(bd, 'c'));
+          group.add(s);
+        }
+      }
+      for (const j of sk.joints) {
+        if (j.kind !== 'rope') continue;
+        group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(j.pa[0], j.pa[1], z(j, 'pa')), new THREE.Vector3(j.pb[0], j.pb[1], z(j, 'pb'))]), wire.muted));
+      }
+      const size = 3 * span;
+      const grid = new THREE.GridHelper(size, Math.round(size / 0.5), css('--line'), css('--line'));
+      grid.position.x = (b.x0 + b.x1) / 2;
+      const root = new THREE.Group();
+      root.add(group, grid);
+      built = { m: undefined as unknown as Mechanism3, r: undefined as unknown as Result3, group: root, machine: group, update: () => {} };
+      scene.add(root);
+      if (!span0) {
+        const c = new THREE.Vector3((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, 0);
+        controls.target.copy(c);
+        camera.position.set(c.x - 0.3 * span, c.y + 0.15 * span, 0.8 * span);
+        controls.update();
+        span0 = span;
+      }
+      render();
+    },
+    // building mode: clicks go to `on` (undefined: back to orbiting/moving nodes); the work plane z shows as a grid
+    setPick(on: ((p: V3) => void) | undefined, z = 0, span = 10) {
+      pick = on;
+      pickZ = z;
+      controls.enableRotate = !on; // left-drag would turn the view under the click; zoom and pan stay
+      planeGrid.visible = !!on;
+      if (on) {
+        const g = new THREE.GridHelper(2 * span, Math.round((2 * span) / 0.5), css('--accent'), css('--line'));
+        planeGrid.geometry.dispose();
+        planeGrid.geometry = g.geometry;
+        planeGrid.material = g.material;
+        planeGrid.rotation.x = Math.PI / 2; // the vertical x–y plane at depth z
+        planeGrid.position.set(controls.target.x, span, z);
+        (planeGrid.material as THREE.Material).opacity = 0.35;
+        (planeGrid.material as THREE.Material).transparent = true;
+      }
+      render();
+    },
+    // the first point of a two-click tool (rod, rope)
+    setMarker(p: V3 | undefined, size = 0.05) {
+      marker.visible = !!p;
+      if (p) marker.position.set(...p), marker.scale.setScalar(size), (marker.material as THREE.MeshBasicMaterial).color.set(css('--accent'));
+      render();
     },
     // landing scatter on the ground (undefined: clear); the camera flies over to it
     setScatter(pts: [number, number][] | undefined, s?: Scatter) {

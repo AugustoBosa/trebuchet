@@ -9,7 +9,7 @@ import { drawFlight, drawMachine, world, type Bounds, type View } from './render
 import type { View3d } from './render3d';
 import { apply3d, lift } from './physics3d/lift';
 import { add, rotate, type Mechanism3 } from './physics3d/model3';
-import { compile3, moveNode, nodes3 } from './sketch3';
+import { apply3, compile3, moveNode, nodes3, type Tool3 } from './sketch3';
 import { gaussian, scatterStats } from './physics3d/dispersion';
 import { seeded } from './optimize';
 import { initialState3, type Result3 } from './physics3d/solver3';
@@ -195,6 +195,41 @@ $('view3d').addEventListener('click', async (e) => {
 });
 for (const id of ['wind', 'pin', 'aim']) $(id).addEventListener('change', () => (current && machine.dataset.mode === 'play' ? run() : preview()));
 $('edit3d').addEventListener('click', () => preview());
+
+// building in 3D (free editor): the 2D tools on a work plane z; two-click tools keep their first point
+let tool3: Tool3 | 'move' = 'move';
+let first3: [number, number, number] | undefined;
+function setTool3(t: Tool3 | 'move') {
+  tool3 = t;
+  first3 = undefined;
+  view3d?.setMarker(undefined);
+  $('tools3d').querySelectorAll<HTMLButtonElement>('[data-t3]').forEach((b) => b.classList.toggle('on', b.dataset.t3 === t));
+  const span = bounds().x1 - bounds().x0;
+  view3d?.setPick(t === 'move' ? undefined : onPick3, +$<HTMLInputElement>('z3d').value || 0, span);
+  $('node3d').textContent = t === 'move' ? '' : t === 'rod' || t === 'rope' ? 'Clique no primeiro ponto.' : 'Clique no plano laranja.';
+}
+function onPick3(p: [number, number, number]) {
+  if (tool3 === 'move') return;
+  if ((tool3 === 'rod' || tool3 === 'rope') && !first3) {
+    first3 = p;
+    view3d?.setMarker(p, 0.01 * (bounds().x1 - bounds().x0));
+    return void ($('node3d').textContent = 'Clique no segundo ponto.');
+  }
+  const sk = editor.get();
+  const err = apply3(sk, tool3, p, first3);
+  first3 = undefined;
+  view3d?.setMarker(undefined);
+  if (err) return void ($('node3d').textContent = err);
+  editor.set(sk); // indices may have changed (delete): reset the 2D editor's selection
+  saveCurrent(design());
+  preview();
+  $('node3d').textContent = 'Feito. ' + (tool3 === 'rod' || tool3 === 'rope' ? 'Clique no primeiro ponto da próxima.' : 'Clique de novo para outra.');
+}
+$('tools3d').addEventListener('click', (e) => {
+  const t = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-t3]')?.dataset.t3;
+  if (t) setTool3(t as Tool3 | 'move');
+});
+$('z3d').addEventListener('change', () => tool3 !== 'move' && setTool3(tool3));
 for (const fmt of ['glb', 'stl'] as const)
   $(`${fmt}3d`).addEventListener('click', async () => {
     const blob = await view3d?.exportModel(fmt);
@@ -333,8 +368,11 @@ function preview3d(v: View3d) {
   } catch (e) {
     $('err').textContent = (e as Error).message;
   }
-  if (!m || !m3) return v.setHandles(undefined);
-  v.draw(m3, still3(m3), 0, bounds());
+  $('tools3d').hidden = !isFree();
+  if (!isFree() && tool3 !== 'move') setTool3('move'); // building tools belong to the free editor
+  if ((!m || !m3) && !isFree()) return v.setHandles(undefined);
+  if (m3) v.draw(m3, still3(m3), 0, bounds());
+  else v.drawSketch(editor.get(), bounds()); // still being built: show the parts as drawn
   const status = (label?: string) => ($('node3d').textContent = label ? `Nó: ${label}. Arraste as setas.` : 'Clique num ponto laranja para movê-lo.');
   if (isFree()) {
     const sk = editor.get();
@@ -345,6 +383,7 @@ function preview3d(v: View3d) {
       select: status,
     });
   }
+  if (!m || !m3) return;
   const hs = handles(m);
   const sling = m3.joints[m3.sling];
   const pinWorld = sling.kind === 'rope' && (sling.a === m3.projectile ? sling.b : sling.a) !== 'ground'

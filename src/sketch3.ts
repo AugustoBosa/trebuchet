@@ -5,7 +5,7 @@ import { twist } from './physics3d/constraints3';
 import { lift } from './physics3d/lift';
 import { add, axisAngle, cross, norm, rotateInv, scale, sub, type BodyRef, type Mechanism3, type Quat, type V3 } from './physics3d/model3';
 import { initialState3 } from './physics3d/solver3';
-import { attachments, compile, type Depth, type SBody, type SJoint, type Sketch } from './sketch';
+import { attachments, compile, removeBody, type Depth, type SBody, type SJoint, type Sketch } from './sketch';
 
 const Z: V3 = [0, 0, 1];
 const zOf = (o: SBody | SJoint, k: keyof Depth) => o.z?.[k] ?? 0;
@@ -165,5 +165,63 @@ export function moveNode(sk: Sketch, node: Node3, p: V3) {
       ? add(pointOf({ o: b, k: 'a' }), scale(sub(pointOf({ o: b, k: 'b' }), pointOf({ o: b, k: 'a' })), f.t))
       : add(pointOf({ o: b, k: 'c' }), f.off);
     f.group.refs.filter((r) => !moved.has(r.o)).forEach((r) => place(r, q));
+  }
+}
+
+// --- building in 3D: the 2D editor's tools on a work plane (same defaults and rules), each point with its depth
+export type Tool3 = 'rod' | 'disk' | 'projectile' | 'cw' | 'pin' | 'weld' | 'rope' | 'delete';
+const TOL3 = 0.03; // m: how close a click must be to a part
+
+// distance from p to body b in 3D (rod: its segment; disk: its surface, 0 inside)
+function distTo(b: SBody, p: V3) {
+  if (b.kind === 'disk') return Math.max(0, norm(sub(p, at3(b.c, zOf(b, 'c')))) - b.r);
+  const A = at3(b.a, zOf(b, 'a')), ab = sub(at3(b.b, zOf(b, 'b')), A);
+  const t = Math.max(0, Math.min(1, (dot3(sub(p, A), ab)) / (norm(ab) ** 2 || 1)));
+  return norm(sub(p, add(A, scale(ab, t))));
+}
+const dot3 = (a: V3, b: V3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+export const bodiesAt3 = (sk: Sketch, p: V3) => sk.bodies.flatMap((b, i) => (distTo(b, p) <= TOL3 ? [i] : []));
+const vec = (p: V3): Vec => [p[0], p[1]];
+const depth = (o: SBody | SJoint, k: keyof Depth, z: number) => z && (o.z = { ...o.z, [k]: z });
+
+// one click (two for rod and rope: `from` then `p`). Returns an error message, or undefined when it worked.
+export function apply3(sk: Sketch, tool: Tool3, p: V3, from?: V3): string | undefined {
+  if (tool === 'rod') {
+    if (!from || norm(sub(p, from)) < 0.05) return 'Clique no outro extremo da barra.';
+    const b: SBody = { kind: 'rod', name: `barra ${sk.bodies.filter((x) => x.kind === 'rod').length + 1}`, a: vec(from), b: vec(p), mass: Math.round(12 * norm(sub(p, from))) };
+    depth(b, 'a', from[2]), depth(b, 'b', p[2]);
+    sk.bodies.push(b);
+  } else if (tool === 'disk' || tool === 'cw' || tool === 'projectile') {
+    if (tool === 'projectile') sk.bodies.forEach((x) => x.kind === 'disk' && x.role === 'projectile' && delete x.role); // only one
+    const b: SBody = tool === 'disk' ? { kind: 'disk', name: `massa ${sk.bodies.filter((x) => x.name.startsWith('massa')).length + 1}`, c: vec(p), r: 0.3, mass: 100 }
+      : tool === 'cw' ? { kind: 'disk', name: 'contrapeso', c: vec(p), r: 0.45, mass: 1000, role: 'counterweight' }
+      : { kind: 'disk', name: 'projétil', c: p[1] < 0.3 ? [p[0], 0.1] : vec(p), r: 0.1, mass: 10, role: 'projectile' };
+    depth(b, 'c', p[2]);
+    sk.bodies.push(b);
+  } else if (tool === 'pin' || tool === 'weld') {
+    const hits = bodiesAt3(sk, p);
+    if (!hits.length || (tool === 'weld' && hits.length < 2)) return tool === 'weld' ? 'A solda precisa de 2 corpos no ponto.' : 'Clique sobre um corpo.';
+    const [b, a] = hits.length >= 2 ? hits.slice(-2) : ['ground' as const, hits[0]];
+    const j: SJoint = tool === 'pin' ? { kind: 'pin', at: vec(p), a, b, ...(b === 'ground' ? { mu: 0.1, radius: 0.05 } : {}) } : { kind: 'weld', at: vec(p), a, b };
+    depth(j, 'at', p[2]);
+    sk.joints.push(j);
+  } else if (tool === 'rope') {
+    if (!from) return 'Clique na outra ponta da corda.';
+    const a = bodiesAt3(sk, from).at(-1) ?? 'ground', b = bodiesAt3(sk, p).at(-1) ?? 'ground';
+    if (a === b) return 'A corda precisa ligar dois corpos diferentes (ou um corpo ao chão).';
+    const flip = a === 'ground'; // keep a body on side a
+    const [pa, pb] = flip ? [p, from] : [from, p];
+    const j: SJoint = { kind: 'rope', a: (flip ? b : a) as number, pa: vec(pa), b: flip ? a : b, pb: vec(pb) };
+    depth(j, 'pa', pa[2]), depth(j, 'pb', pb[2]);
+    sk.joints.push(j);
+  } else {
+    // delete: a joint with a point here first, else the topmost body here (and its joints)
+    const ji = sk.joints.findIndex((j) => pointKeys(j).some((k) => norm(sub(pointOf({ o: j, k }), p)) <= TOL3));
+    if (ji >= 0) sk.joints.splice(ji, 1);
+    else {
+      const bi = bodiesAt3(sk, p).at(-1);
+      if (bi === undefined) return 'Nada aqui para apagar.';
+      removeBody(sk, bi);
+    }
   }
 }
