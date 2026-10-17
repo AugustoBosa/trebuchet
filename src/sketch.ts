@@ -77,6 +77,9 @@ function toLocal(b: SBody, w: Vec): Vec {
   return [c * d[0] + s * d[1], -s * d[0] + c * d[1]];
 }
 
+// drum turning direction from where its rope goes: to the −x side → clockwise (1), +x side → counterclockwise (−1)
+export const camDir = (hub: Vec, ropeX: number): 1 | -1 => (ropeX <= hub[0] ? 1 : -1);
+
 export function compile(sk: Sketch): Mechanism {
   const projectile = sk.bodies.findIndex((b) => b.kind === 'disk' && b.role === 'projectile');
   if (projectile < 0) throw new Error('Falta o projétil: use a ferramenta "Projétil".');
@@ -119,7 +122,10 @@ export function compile(sk: Sketch): Mechanism {
         const top = j.over ? j.over[1] + dist(j.at, j.over) : j.at[1];
         const cw = sk.bodies[j.a];
         const y = cw.kind === 'disk' ? cw.c[1] : (cw.a[1] + cw.b[1]) / 2;
-        return { kind: 'cam', a: j.a, b: j.b, hub: loc(j.b, j.at), theta0: bodies[j.b].angle, r0: j.r0, r1: j.r1, span: j.span, length: top - y, ...(j.over ? { over: j.over } : {}) };
+        // the rope leaves the drum on the side of the pulley (or counterweight): the arm turns the way that pays it out
+        const x = j.over ? j.over[0] : cw.kind === 'disk' ? cw.c[0] : (cw.a[0] + cw.b[0]) / 2;
+        const dir = camDir(j.at, x);
+        return { kind: 'cam', a: j.a, b: j.b, hub: loc(j.b, j.at), theta0: bodies[j.b].angle, r0: j.r0, r1: j.r1, span: j.span, length: top - y, ...(j.over ? { over: j.over } : {}), ...(dir < 0 ? { dir } : {}) };
       }
     }
   });

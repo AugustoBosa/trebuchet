@@ -25,7 +25,7 @@ export type Joint =
   | Cam;
 
 // Counterweight rope wound on a spiral drum fixed to body b (MURLIN nodes, wheel trebuchet). As b turns forward
-// (clockwise) by φ = theta0 − θb, the rope unwinds F(φ) = ∫r dφ, the radius going linearly r0 → r1 over `span` rad.
+// (clockwise; counterclockwise when dir = −1) by φ = dir·(theta0 − θb), the rope unwinds F(φ) = ∫r dφ, the radius going linearly r0 → r1 over `span` rad.
 // Body a hangs from the rope straight down (from the pulley `over`, or from the drum itself if there is none).
 // Taut rope:  (top − ya) + span_to_drum − F(φ) = length.  Unilateral like a rope: it pulls, or goes slack.
 export interface Cam {
@@ -39,6 +39,7 @@ export interface Cam {
   span: number;
   over?: Vec; // fixed pulley (world)
   length: number;
+  dir?: 1 | -1; // 1 (default): the arm turns clockwise and the rope leaves the drum's −x side; −1: mirrored machine
 }
 
 export interface Mechanism {

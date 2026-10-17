@@ -41,7 +41,10 @@ export function createView3d(canvas: HTMLCanvasElement) {
   const tc = new TransformControls(camera, canvas);
   const proxy = new THREE.Object3D();
   const nodeGroup = new THREE.Group();
-  scene.add(proxy, nodeGroup, tc.getHelper());
+  const handleRoot = new THREE.Group(); // turned with an aimed machine: node coordinates stay in the machine's frame
+  handleRoot.add(proxy, nodeGroup);
+  scene.add(handleRoot, tc.getHelper());
+  tc.setSpace('local'); // arrows along the machine's axes (the proxy's parent turns with the aim)
   tc.setTranslationSnap(0.01);
   let handles: Handle3[] = [];
   let events: HandleEvents | undefined;
@@ -133,11 +136,11 @@ export function createView3d(canvas: HTMLCanvasElement) {
         if (j.over) beam([j.over[0], 0, j.over[2]], j.over, th, solid.muted, group); // pulley post
         ups.push((q) => {
           const hub = world(q, j.b, j.hub);
-          const { r: rad } = camRope(j, j.theta0 - twist({ q, v: q }, j.b, 'ground', j.axis)); // twist reads only q
+          const { r: rad } = camRope(j, (j.dir ?? 1) * (j.theta0 - twist({ q, v: q }, j.b, 'ground', j.axis))); // twist reads only q
           drum.position.set(...hub);
           drum.scale.set(rad, 1, rad);
           const cw = world(q, j.a, [0, 0, 0]);
-          const side: V3 = [hub[0] - rad, hub[1], hub[2]];
+          const side: V3 = [hub[0] - (j.dir ?? 1) * rad, hub[1], hub[2]];
           if (j.over) toDrum(side, j.over), down([cw[0], j.over[1], cw[2]], cw);
           else toDrum(side, cw), down(cw, cw);
         });
@@ -187,12 +190,19 @@ export function createView3d(canvas: HTMLCanvasElement) {
       }
     };
     update(q0, 0);
+    group.rotation.y = m.aim ?? 0; // aimed machine: it and its flight turn together, the ground grid doesn't
     const box = new THREE.Box3().setFromObject(group); // the machine alone: grid and flight come after
     const size = Math.max(2 * span, 1.2 * r.range + span);
     const step = 10 ** Math.round(Math.log10(span / 4)); // ~1 m for full-size machines
     const grid = new THREE.GridHelper(size, Math.min(200, Math.round(size / step)), css('--line'), css('--line'));
     grid.position.x = b.x0 - 0.5 * span + size / 2;
-    group.add(grid);
+    const root = new THREE.Group();
+    root.add(group, grid);
+    if (m.aim) { // the target line (world x), so the aim reads at a glance
+      const tl = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(b.x0, 0.002 * span, 0), new THREE.Vector3(b.x0 + size, 0.002 * span, 0)]), wire.muted);
+      root.add(tl);
+    }
+    handleRoot.rotation.y = m.aim ?? 0;
 
     if (r.release) {
       const g = new THREE.BufferGeometry().setFromPoints(r.flight.map((p) => new THREE.Vector3(...p)));
@@ -204,14 +214,14 @@ export function createView3d(canvas: HTMLCanvasElement) {
 
     // recenter on every build, keeping the user's orbit angle (not while a node is being edited: the view would slide
     // under the cursor); reset the distance only if the machine changed size a lot
-    if (sel >= 0 && span0) return { m, r, group, update };
+    if (sel >= 0 && span0) return { m, r, group: root, update };
     const c = box.getCenter(new THREE.Vector3());
     const off = camera.position.clone().sub(controls.target);
     if (!span0 || span / span0 > 1.5 || span0 / span > 1.5) off.set(-0.3 * span, 0.15 * span, 0.8 * span), (span0 = span);
     controls.target.copy(c);
     camera.position.copy(c).add(off);
     controls.update();
-    return { m, r, group, update };
+    return { m, r, group: root, update };
   }
 
   return {

@@ -241,8 +241,8 @@ export interface Result3 {
   frames: Frame3[];
   release?: { t: number; p: V3; v: V3; speed: number; angle: number };
   flight: V3[];
-  range: number; // downrange (x) at landing
-  lateral: number; // sideways drift (z) at landing
+  range: number; // downrange (world x) at landing
+  lateral: number; // sideways drift (world z) at landing
   efficiency: number;
   inputEnergy: number;
   peakForce: number[];
@@ -348,9 +348,10 @@ export function simulate3(m: Mechanism3, opts: { dt?: number; tMax?: number; fra
       const e = energy3(m, sr);
       res.dissipated = e0.ke + e0.pe + work - e.ke - e.pe;
       const f = fly3(p, v, dragK3(m), m.air.wind);
-      res.flight = f.path;
-      res.range = f.range;
-      res.lateral = f.lateral;
+      res.flight = f.path; // machine frame (the 3D view turns it with the machine)
+      const aim = m.aim ?? 0; // landing point turned into the world: x along the target line, z sideways
+      res.range = f.range * Math.cos(aim) + f.lateral * Math.sin(aim);
+      res.lateral = -f.range * Math.sin(aim) + f.lateral * Math.cos(aim);
       if (afterRelease <= 0) break;
     }
   }

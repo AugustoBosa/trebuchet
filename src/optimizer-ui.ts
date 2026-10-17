@@ -9,11 +9,11 @@ const DEFAULT_ON: (keyof Params)[] = ['slingLength', 'releaseDeg'];
 const STARTS = 8; // current design + 7 Latin-hypercube points
 
 const OBJECTIVE_NAMES: Record<Objective, string> = { range: 'Alcance', efficiency: 'Eficiência', lateral: 'Desvio lateral', robust: 'Alcance robusto' };
-const label = (k: keyof OptParams) => (k === 'pinOffset' ? 'Pino fora do centro (m)' : LABELS[k]);
+const label = (k: keyof OptParams) => (k === 'pinOffset' ? 'Pino fora do centro (m)' : k === 'aimDeg' ? 'Mira (°)' : LABELS[k]);
 
 // env3: the 3D conditions while the 3D view is on (then everything runs on the 3D solver), else undefined.
-// applyPin: write an optimized pin offset (m) back to the 3D field.
-export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p: Partial<Params>) => void; env3: () => Env3 | undefined; applyPin: (m: number) => void }) {
+// apply3d: write optimized 3D settings (pin offset in m, aim in degrees) back to the 3D fields.
+export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p: Partial<Params>) => void; env3: () => Env3 | undefined; apply3d: (v: { pinOffset?: number; aimDeg?: number }) => void }) {
   const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
   const sweepCanvas = $<HTMLCanvasElement>('sweep');
   let pool: Worker[] = [];
@@ -107,7 +107,7 @@ export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p:
     }
     if (!vars.length) return void status('Marque ao menos uma variável.');
     $('opt-result').innerHTML = '';
-    const base: OptParams = { ...o.params, ...(env3 ? { pinOffset: env3.pinOffset } : {}) };
+    const base: OptParams = { ...o.params, ...(env3 ? { pinOffset: env3.pinOffset, aimDeg: env3.aimDeg } : {}) };
     const map = paramMapper(base, vars, arm ? armTotal : undefined);
     const kind = o.kind();
     const obj = objective();
@@ -153,8 +153,8 @@ export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p:
     </table>`;
     $('opt-result').querySelectorAll<HTMLButtonElement>('[data-opt]').forEach((b) =>
       b.addEventListener('click', () => {
-        const { pinOffset, ...rest } = Object.fromEntries(vars.map((k) => [k, +(optima[Number(b.dataset.opt)].params[k] ?? 0).toPrecision(4)])) as Partial<OptParams>;
-        if (pinOffset !== undefined) o.applyPin(pinOffset); // before apply(): it re-runs the shot with the field's value
+        const { pinOffset, aimDeg, ...rest } = Object.fromEntries(vars.map((k) => [k, +(optima[Number(b.dataset.opt)].params[k] ?? 0).toPrecision(4)])) as Partial<OptParams>;
+        o.apply3d({ pinOffset, aimDeg }); // before apply(): it re-runs the shot with the fields' values
         o.apply(rest);
       }),
     );
@@ -207,7 +207,7 @@ export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p:
       const fields = KINDS[o.kind()].fields.filter((f) => !ENVIRONMENT.includes(f));
       $('opt-vars').innerHTML = fields
         .map((f) => `<label><input type="checkbox" value="${f}" ${DEFAULT_ON.includes(f) ? 'checked' : ''}>${LABELS[f]}</label>`)
-        .join('') + (o.env3() ? `<label><input type="checkbox" value="pinOffset">${label('pinOffset')}</label>` : '');
+        .join('') + (o.env3() ? (['pinOffset', 'aimDeg'] as const).map((k) => `<label><input type="checkbox" value="${k}">${label(k)}</label>`).join('') : '');
       const opts = fields.map((f) => `<option value="${f}">${LABELS[f]}</option>`).join('');
       $('sw-x').innerHTML = opts;
       $('sw-y').innerHTML = '<option value="">— nenhum (curva 1D)</option>' + opts;

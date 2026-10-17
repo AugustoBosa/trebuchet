@@ -81,12 +81,12 @@ export function drawMachine(c: HTMLCanvasElement, m: Mechanism, r: Result, t: nu
     } else if (j.kind === 'cam') {
       // drum at its current radius; rope off its back side, up over the pulley (if any) and down to the counterweight
       const hub = world(f.q, j.b, j.hub);
-      const { r } = camRope(j, j.theta0 - f.q[3 * j.b + 2]);
+      const { r } = camRope(j, (j.dir ?? 1) * (j.theta0 - f.q[3 * j.b + 2]));
       g.strokeStyle = muted;
       g.lineWidth = 2;
       g.beginPath(); g.arc(...v.P(hub), r * v.s, 0, 2 * Math.PI); g.stroke();
       const cw = world(f.q, j.a, [0, 0]);
-      const side: Vec = [hub[0] - r, hub[1]];
+      const side: Vec = [hub[0] - (j.dir ?? 1) * r, hub[1]];
       if (j.over) {
         const pr = (j.over[0] - cw[0]) / 2; // pulley spans the two rope sides
         const c: Vec = [cw[0] + pr, j.over[1]];

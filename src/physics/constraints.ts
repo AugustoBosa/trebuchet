@@ -132,7 +132,8 @@ export function jointRows(s: State, j: Joint, nBodies: number): Row[] {
     }
     case 'cam': {
       const w = s.v[3 * j.b + 2];
-      const { r, F, dr } = camRope(j, j.theta0 - s.q[3 * j.b + 2]);
+      const dir = j.dir ?? 1;
+      const { r, F, dr } = camRope(j, dir * (j.theta0 - s.q[3 * j.b + 2]));
       const H = point(s, j.b, j.hub); // drum center (pinned in practice: these terms just route the pull into the axle)
       const J = new Float64Array(n);
       J[3 * j.a + 1] = -1;
@@ -154,8 +155,8 @@ export function jointRows(s: State, j: Joint, nBodies: number): Row[] {
         Cdot += H.vel[1];
         bias -= H.cen[1];
       }
-      J[3 * j.b + 2] += r;
-      Cdot += r * w;
+      J[3 * j.b + 2] += dir * r;
+      Cdot += dir * r * w;
       return [{ J, C, Cdot, bias }];
     }
     case 'roller': {

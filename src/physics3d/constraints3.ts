@@ -157,7 +157,8 @@ export function jointRows3(s: State3, j: Joint3, nBodies: number): Row3[] {
     case 'cam': {
       // same as the planar cam, with θb = twist of the arm about the drum axis (ponytail: axis keeps its direction)
       const w = dot(j.axis, omega(s, j.b));
-      const { r, F, dr } = camRope(j, j.theta0 - twist(s, j.b, 'ground', j.axis));
+      const dir = j.dir ?? 1;
+      const { r, F, dr } = camRope(j, dir * (j.theta0 - twist(s, j.b, 'ground', j.axis)));
       const H = point3(s, j.b, j.hub);
       const J = new Float64Array(n);
       J[6 * j.a + 1] = -1;
@@ -178,8 +179,8 @@ export function jointRows3(s: State3, j: Joint3, nBodies: number): Row3[] {
         Cdot += H.vel[1];
         bias -= H.cen[1];
       }
-      addAngular(J, j.b, j.axis, r);
-      Cdot += r * w;
+      addAngular(J, j.b, j.axis, dir * r);
+      Cdot += dir * r * w;
       return [{ J, C, Cdot, bias }];
     }
   }

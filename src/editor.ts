@@ -2,7 +2,7 @@
 import { css, cssHeight, fitCanvas } from './charts';
 import type { Vec } from './physics/model';
 import { painter, view, type Bounds, type View } from './render';
-import { allPoints, analyze, attachments, compile, detachedJoints, removeBody, segDist, type Role, type SBody, type SJoint, type Sketch } from './sketch';
+import { allPoints, analyze, attachments, camDir, compile, detachedJoints, removeBody, segDist, type Role, type SBody, type SJoint, type Sketch } from './sketch';
 
 export type Tool = 'select' | 'rod' | 'disk' | 'projectile' | 'cw' | 'pin' | 'weld' | 'rope' | 'hslider' | 'vslider' | 'pull' | 'foot' | 'spike' | 'roller' | 'floor' | 'spring' | 'cam';
 export const TOOLS: [Tool, string, string][] = [
@@ -57,10 +57,24 @@ export function createEditor(o: {
   // --- geometry helpers ---
   const tol = () => SNAP_PX / v.s;
   const d2 = (a: Vec, b: Vec) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+  // existing point > grid node, except near a rod: there the point lands ON the rod (a diagonal rod falls between grid
+  // nodes, and a joint snapped off it would read as a loose connection); a grid node already on the rod is kept
   const snap = (p: Vec, exclude: Vec[] = []): Vec => {
     let best: Vec | undefined;
     for (const q of allPoints(sk)) if (!exclude.includes(q) && d2(p, q) < tol() && (!best || d2(p, q) < d2(p, best))) best = q;
-    return best ? [best[0], best[1]] : [Math.round(p[0] / GRID) * GRID, Math.max(0, Math.round(p[1] / GRID) * GRID)];
+    if (best) return [best[0], best[1]];
+    const grid: Vec = [Math.round(p[0] / GRID) * GRID, Math.max(0, Math.round(p[1] / GRID) * GRID)];
+    let foot: Vec | undefined;
+    let bd = tol();
+    for (const b of sk.bodies) {
+      if (b.kind !== 'rod' || exclude.includes(b.a) || exclude.includes(b.b)) continue; // not onto the rod being reshaped
+      if (segDist(grid, b.a, b.b) <= 0.005) return grid;
+      const ab: Vec = [b.b[0] - b.a[0], b.b[1] - b.a[1]];
+      const t = Math.max(0, Math.min(1, ((p[0] - b.a[0]) * ab[0] + (p[1] - b.a[1]) * ab[1]) / (ab[0] ** 2 + ab[1] ** 2 || 1)));
+      const q: Vec = [b.a[0] + t * ab[0], b.a[1] + t * ab[1]];
+      if (d2(p, q) < bd) (bd = d2(p, q)), (foot = q);
+    }
+    return foot ?? grid;
   };
   const bodiesAt = (p: Vec) =>
     sk.bodies.map((b, i) => [b, i] as const)
@@ -106,7 +120,7 @@ export function createEditor(o: {
         const hang: Vec = cw.kind === 'disk' ? cw.c : [(cw.a[0] + cw.b[0]) / 2, (cw.a[1] + cw.b[1]) / 2];
         g.strokeStyle = c; g.lineWidth = 2;
         g.beginPath(); g.arc(...v.P(j.at), j.r0 * v.s, 0, 2 * Math.PI); g.stroke();
-        const side: Vec = [j.at[0] - j.r0, j.at[1]];
+        const side: Vec = [j.at[0] - camDir(j.at, j.over ? j.over[0] : hang[0]) * j.r0, j.at[1]];
         if (j.over) (line(side, j.over, ink, 1.5), line(j.over, [hang[0], j.over[1]], ink, 1.5), line([hang[0], j.over[1]], hang, ink, 1.5));
         else line(side, hang, ink, 1.5);
       }

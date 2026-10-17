@@ -9,9 +9,9 @@ export type Objective = 'range' | 'efficiency' | 'lateral' | 'robust';
 export const FAST_DT = 2e-3; // ≤0.012% off the 1e-4 reference (release is interpolated), 4× cheaper than 5e-4; applied results are re-run at full accuracy
 
 // 3D conditions of the shot; pinOffset can also be an optimization variable (then it rides in the params)
-export interface Env3 { windZ: number; pinOffset: number }
-export type OptParams = Params & { pinOffset?: number };
-const PIN_RANGE: [number, number] = [-0.5, 0.5]; // m, same limits as the 3D field (±50 cm)
+export interface Env3 { windZ: number; pinOffset: number; aimDeg: number }
+export type OptParams = Params & { pinOffset?: number; aimDeg?: number };
+const RANGES3 = { pinOffset: [-0.5, 0.5], aimDeg: [-15, 15] } as const; // same limits as the 3D fields (±50 cm, ±15°)
 // robust range: release ±2° (the pin's timing scatter) and a ±3 m/s tail/head gust around the nominal shot
 const SCENARIOS = [{ dDeg: 0, windX: 0 }, { dDeg: 2, windX: 0 }, { dDeg: -2, windX: 0 }, { dDeg: 0, windX: 3 }, { dDeg: 0, windX: -3 }];
 
@@ -27,7 +27,7 @@ export function evaluate(kind: Kind, p: OptParams, objective: Objective, env3?: 
       return objective === 'range' ? r.range : r.efficiency;
     }
     const shot = (dDeg = 0, windX = 0) =>
-      simulate3(apply3d(lift(build(kind, { ...p, releaseDeg: p.releaseDeg + dDeg })), { windZ: env3.windZ, windX, pinOffset: p.pinOffset ?? env3.pinOffset }), opts);
+      simulate3(apply3d(lift(build(kind, { ...p, releaseDeg: p.releaseDeg + dDeg })), { windZ: env3.windZ, windX, pinOffset: p.pinOffset ?? env3.pinOffset, aimDeg: p.aimDeg ?? env3.aimDeg }), opts);
     if (objective === 'robust') {
       const rs = SCENARIOS.map((sc) => shot(sc.dDeg, sc.windX));
       if (rs.some((r) => r.error)) return 0;
@@ -51,7 +51,7 @@ export const shownValue = (objective: Objective, v: number) =>
 
 // Box-bounded search: variables live in [0,1] and are mapped onto each slider's range.
 // 'armSplit' is not a parameter but a share: the fraction of a fixed beam (long + short arm = armTotal) given to the long arm.
-export type OptVar = keyof Params | 'armSplit' | 'pinOffset';
+export type OptVar = keyof Params | 'armSplit' | 'pinOffset' | 'aimDeg';
 
 // Range of that fraction keeping both arms inside their slider limits (empty when lo > hi: the beam is too short or too long).
 export function armSplitRange(total: number): [number, number] {
@@ -61,12 +61,12 @@ export function armSplitRange(total: number): [number, number] {
 }
 
 export function paramMapper(base: OptParams, vars: OptVar[], armTotal = base.longArm + base.shortArm) {
-  const bounds = (k: OptVar): [number, number] => (k === 'armSplit' ? armSplitRange(armTotal) : k === 'pinOffset' ? PIN_RANGE : [RANGES[k][0], RANGES[k][1]]);
+  const bounds = (k: OptVar): [number, number] => (k === 'armSplit' ? armSplitRange(armTotal) : k === 'pinOffset' || k === 'aimDeg' ? [...RANGES3[k]] : [RANGES[k][0], RANGES[k][1]]);
   return {
     toUnit: (p: OptParams) =>
       vars.map((k) => {
         const [lo, hi] = bounds(k);
-        return ((k === 'armSplit' ? p.longArm / (p.longArm + p.shortArm) : k === 'pinOffset' ? (p.pinOffset ?? 0) : p[k]) - lo) / (hi - lo);
+        return ((k === 'armSplit' ? p.longArm / (p.longArm + p.shortArm) : (p[k] ?? 0)) - lo) / (hi - lo);
       }),
     toParams: (u: number[]): OptParams => {
       const p: OptParams = { ...base };
@@ -74,7 +74,6 @@ export function paramMapper(base: OptParams, vars: OptVar[], armTotal = base.lon
         const [lo, hi] = bounds(k);
         const v = lo + Math.min(1, Math.max(0, u[i])) * (hi - lo);
         if (k === 'armSplit') (p.longArm = armTotal * v), (p.shortArm = armTotal * (1 - v));
-        else if (k === 'pinOffset') p.pinOffset = v;
         else p[k] = v;
       });
       return p;

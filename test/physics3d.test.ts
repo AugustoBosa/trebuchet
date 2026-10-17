@@ -63,4 +63,13 @@ describe('motor 3D', () => {
     expect(c / a).toBeGreaterThan(1.9);
     expect(c / a).toBeLessThan(2.1);
   });
+
+  it('mira: sem vento, girar a máquina gira o ponto de queda (alcance·cosψ, −alcance·senψ)', () => {
+    const m = lift(build('hinged', defaultsFor('hinged')));
+    const r0 = simulate3(m, { afterRelease: 0 });
+    const r = simulate3(apply3d(m, { windZ: 0, pinOffset: 0, aimDeg: 3 }), { afterRelease: 0 });
+    const a = (3 * Math.PI) / 180;
+    expect(r.range).toBeCloseTo(r0.range * Math.cos(a), 6);
+    expect(r.lateral).toBeCloseTo(-r0.range * Math.sin(a), 6);
+  });
 });

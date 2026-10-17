@@ -155,7 +155,7 @@
               <li><b>Monte o design base.</b> Escolha o tipo de trebuchet e ajuste os controles do jeito que quer partir. Ele é o ponto de comparação ("atual") e fixa todas as variáveis não marcadas.</li>
               <li><b>Escolha o objetivo.</b> <i>Alcance</i> maximiza a distância em metros. <i>Eficiência</i> maximiza o percentual da energia de entrada que o projétil leva na soltura. Os dois podem pedir designs diferentes.
                 <ul>
-                  <li>Com a <b>Vista 3D</b> ligada, tudo roda no motor 3D, com o vento lateral e o pino que você definiu, e aparecem dois objetivos a mais. <i>Desvio lateral mínimo</i> procura o design que cai na linha do alvo. Marque a variável <i>Pino fora do centro</i> e ele acha o deslocamento do pino que compensa o vento (cada 10 cm de pino desvia cerca de 0,7 m num trebuchet de 5 m).</li>
+                  <li>Com a <b>Vista 3D</b> ligada, tudo roda no motor 3D, com o vento lateral e o pino que você definiu, e aparecem dois objetivos a mais. <i>Desvio lateral mínimo</i> procura o design que cai na linha do alvo. Marque a variável <i>Pino fora do centro</i> e ele acha o deslocamento do pino que compensa o vento (cada 10 cm de pino desvia cerca de 0,7 m num trebuchet de 5 m). Para vento forte, marque <i>Mira</i>: ela gira a máquina inteira, como faz uma equipe de verdade, e cada grau desloca a queda em cerca de 1/57 do alcance.</li>
                   <li><i>Alcance robusto</i> é a média menos o desvio-padrão do alcance em 5 tiros: o nominal, a soltura ±2° (a dispersão do pino) e uma rajada de ±3 m/s a favor ou contra. Ele prefere designs que perdem pouco quando algo varia. Cada avaliação custa 5 simulações, por isso é mais lento.</li>
                 </ul></li>
               <li><b>Marque as variáveis livres.</b> Por padrão são a funda e o ângulo de liberação. Quanto mais variáveis, mais simulações e mais chance de a busca parar em ótimos locais. Comece com 2 ou 3 e vá acrescentando. Densidade do ar, atrito e arrasto não aparecem: são condições do ambiente, não escolhas de projeto.</li>
@@ -209,6 +209,7 @@
         <span id="opts3d" hidden>
           <label title="Vento soprando de lado (positivo = para a esquerda de quem olha o alvo). Empurra o projétil no voo e durante o giro."><span>Vento lateral (m/s)</span><input type="number" id="wind" aria-label="Vento lateral em metros por segundo" value="0" step="1" min="-20" max="20"></label>
           <label title="Pino de soltura montado fora da linha central do braço: a funda puxa a pedra de lado e o tiro desvia."><span>Pino fora do centro (cm)</span><input type="number" id="pin" aria-label="Deslocamento lateral do pino de soltura em centímetros" value="0" step="1" min="-50" max="50"></label>
+          <label title="Gira a máquina inteira em torno da vertical (positivo = para a esquerda de quem olha o alvo): é como a equipe corrige o vento. O alcance e o desvio são medidos na linha do alvo."><span>Mira (°)</span><input type="number" id="aim" aria-label="Mira, giro da máquina em graus" value="0" step="0.5" min="-15" max="15"></label>
           <button type="button" class="ghost" id="edit3d" title="Volta à pose armada com os nós arrastáveis em 3D">Editar nós</button>
           <span id="node3d" class="muted" aria-live="polite"></span>
         </span></div>

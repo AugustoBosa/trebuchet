@@ -38,6 +38,7 @@ export interface Cam3 {
   span: number;
   over?: V3;
   length: number;
+  dir?: 1 | -1; // see Cam in physics/model.ts
 }
 
 export interface Mechanism3 {
@@ -50,7 +51,8 @@ export interface Mechanism3 {
   sling: number;
   axle: number;
   releaseAngle: number;
-  air: { density: number; cd: number; wind?: V3 };
+  air: { density: number; cd: number; wind?: V3 }; // wind in the machine's frame
+  aim?: number; // rad: the whole machine turned about the vertical (three.js rotation.y sense); ranges are reported along world x
 }
 
 export const dot = (a: V3, b: V3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];

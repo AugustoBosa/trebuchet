@@ -5,7 +5,7 @@ import { mountOptimizer } from './optimizer-ui';
 import { G, type Mechanism, type Vec } from './physics/model';
 import { initialState, simulate, type Result } from './physics/solver';
 import { build, defaults, defaultsFor, geometry, KINDS, type Kind, type Params } from './presets';
-import { drawFlight, drawMachine, type Bounds, type View } from './render';
+import { drawFlight, drawMachine, world, type Bounds, type View } from './render';
 import type { View3d } from './render3d';
 import { apply3d, lift } from './physics3d/lift';
 import { add, rotate, type Mechanism3 } from './physics3d/model3';
@@ -37,8 +37,11 @@ const optimizer = mountOptimizer({
   kind: () => kindSel.value as Kind,
   params,
   apply: (p) => (Object.assign(params, p), syncForm(), run()), // run() re-simulates at full accuracy
-  env3: () => (is3d() ? { windZ: +$<HTMLInputElement>('wind').value || 0, pinOffset: (+$<HTMLInputElement>('pin').value || 0) / 100 } : undefined),
-  applyPin: (m) => ($<HTMLInputElement>('pin').value = String(Math.round(m * 100))),
+  env3: () => (is3d() ? env3() : undefined),
+  apply3d: (v) => {
+    if (v.pinOffset !== undefined) $<HTMLInputElement>('pin').value = String(Math.round(v.pinOffset * 100));
+    if (v.aimDeg !== undefined) $<HTMLInputElement>('aim').value = String(+v.aimDeg.toFixed(2));
+  },
 });
 
 function buildForm() {
@@ -158,7 +161,8 @@ let lastT = 0;
 
 const is3d = () => !!view3d && !machine3d.hidden;
 // free sketches keep their depths (compile3); presets are lifted from their planar build
-const mechanism3 = (m: Mechanism) => apply3d(isFree() ? compile3(editor.get()) : lift(m), { windZ: +$<HTMLInputElement>('wind').value || 0, pinOffset: (+$<HTMLInputElement>('pin').value || 0) / 100 });
+const env3 = () => ({ windZ: +$<HTMLInputElement>('wind').value || 0, pinOffset: (+$<HTMLInputElement>('pin').value || 0) / 100, aimDeg: +$<HTMLInputElement>('aim').value || 0 });
+const mechanism3 = (m: Mechanism) => apply3d(isFree() ? compile3(editor.get()) : lift(m), env3());
 const still3 = (m3: Mechanism3): Result3 => ({
   frames: [{ t: 0, ...initialState3(m3), ke: 0, pe: 0, kes: [], forces: [], speed: 0 }],
   flight: [], range: 0, lateral: 0, efficiency: 0, inputEnergy: 0, peakForce: [], dissipated: 0,
@@ -186,7 +190,7 @@ $('view3d').addEventListener('click', async (e) => {
   if (current && machine.dataset.mode === 'play') run(); // re-simulate with the other solver
   else preview();
 });
-for (const id of ['wind', 'pin']) $(id).addEventListener('change', () => (current && machine.dataset.mode === 'play' ? run() : preview()));
+for (const id of ['wind', 'pin', 'aim']) $(id).addEventListener('change', () => (current && machine.dataset.mode === 'play' ? run() : preview()));
 $('edit3d').addEventListener('click', () => preview());
 
 
@@ -213,8 +217,30 @@ const dist = (a: Vec, b: Vec) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 const clamp = (v: number, f: keyof Params) => Math.min(RANGES[f][1], Math.max(RANGES[f][0], +v.toFixed(2)));
 let handleView: View | undefined;
 
+// The walking arm is drawn already tipped by the firing nudge, so its handles sit on the real pose and every
+// handle sets a length or an angle measured from the axle (both survive the tip): no rest-pose geometry needed.
+function walkingHandles(m: Mechanism): Handle[] {
+  const q = initialState(m).q;
+  const axle = m.joints.find((j) => j.kind === 'pin' && j.b !== 'ground');
+  const finger = m.joints.find((j) => j.kind === 'foot');
+  const spikes = m.joints.find((j) => j.kind === 'spike');
+  if (axle?.kind !== 'pin' || finger?.kind !== 'foot' || spikes?.kind !== 'spike' || m.counterweight === undefined) return [];
+  const pivot = world(q, axle.a, axle.pa);
+  const tip = world(q, finger.a, finger.pa);
+  const legEnd = world(q, spikes.a, spikes.pa);
+  const deg = (u: Vec, w: Vec) => (Math.atan2(u[0] * w[1] - u[1] * w[0], u[0] * w[0] + u[1] * w[1]) * 180) / Math.PI;
+  const rel = (p: Vec): Vec => [p[0] - pivot[0], p[1] - pivot[1]];
+  return [
+    { label: 'braço longo', pos: tip, apply: (p) => (params.longArm = clamp(dist(p, pivot), 'longArm')) },
+    { label: 'braço curto', pos: [q[3 * m.counterweight], q[3 * m.counterweight + 1]], apply: (p) => (params.shortArm = clamp(dist(p, pivot), 'shortArm')) },
+    // leg: its length, and its angle off the long arm (the tuning string's setting)
+    { label: 'perna', pos: legEnd, apply: (p) => ((params.legLength = clamp(dist(p, pivot), 'legLength')), (params.cockDeg = clamp(deg(rel(tip), rel(p)), 'cockDeg'))) },
+    { label: 'funda', pos: m.bodies[m.projectile].pos, apply: (p) => (params.slingLength = clamp(dist(p, tip), 'slingLength')) },
+  ];
+}
+
 function handles(m: Mechanism): Handle[] {
-  if (kindSel.value === 'walking') return []; // drawn tipped by the firing nudge: rest-pose handles wouldn't line up
+  if (kindSel.value === 'walking') return walkingHandles(m);
   const g = geometry(params, kindSel.value as Kind);
   const h: Handle[] = [
     { label: 'eixo', pos: g.pivot, apply: (p) => (params.pivotHeight = clamp(p[1], 'pivotHeight')) },

@@ -51,8 +51,12 @@ export function lift(m: Mechanism): Mechanism3 {
 
 // Out-of-plane conditions a planar model can't have: a crosswind (m/s, +z; windX: tail wind) and the release pin off the arm's
 // center line (m, +z). The sling is re-measured from the moved pin to the stone, which stays on the center line.
-export function apply3d(m: Mechanism3, o: { windZ: number; pinOffset: number; windX?: number }): Mechanism3 {
-  const out: Mechanism3 = { ...m, air: { ...m.air, wind: [o.windX ?? 0, 0, o.windZ] }, joints: [...m.joints] };
+// aimDeg turns the whole machine about the vertical (how crews correct for wind): simulated in the machine's frame
+// with the wind turned the other way, the landing point is turned back (simulate3) — exact, gravity and ground don't care.
+export function apply3d(m: Mechanism3, o: { windZ: number; pinOffset: number; windX?: number; aimDeg?: number }): Mechanism3 {
+  const aim = ((o.aimDeg ?? 0) * Math.PI) / 180;
+  const wx = o.windX ?? 0, c = Math.cos(aim), s = Math.sin(aim);
+  const out: Mechanism3 = { ...m, air: { ...m.air, wind: [wx * c - o.windZ * s, 0, wx * s + o.windZ * c] }, joints: [...m.joints], ...(aim ? { aim } : {}) };
   const j = m.joints[m.sling];
   if (j.kind !== 'rope' || !o.pinOffset) return out;
   const atA = j.a !== m.projectile; // which end holds the pin
