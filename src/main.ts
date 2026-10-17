@@ -195,6 +195,14 @@ $('view3d').addEventListener('click', async (e) => {
 });
 for (const id of ['wind', 'pin', 'aim']) $(id).addEventListener('change', () => (current && machine.dataset.mode === 'play' ? run() : preview()));
 $('edit3d').addEventListener('click', () => preview());
+// phones: each group of 3D controls folds behind its own button (CSS shows the buttons only on narrow screens)
+document.querySelectorAll<HTMLButtonElement>('.g3-toggle').forEach((b) =>
+  b.addEventListener('click', () => {
+    const open = b.getAttribute('aria-expanded') !== 'true';
+    b.setAttribute('aria-expanded', String(open));
+    $(b.getAttribute('aria-controls')!).classList.toggle('open', open);
+  }),
+);
 
 // building in 3D (free editor): the 2D tools on a work plane z; two-click tools keep their first point
 let tool3: Tool3 | 'move' = 'move';

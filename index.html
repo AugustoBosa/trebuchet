@@ -86,8 +86,17 @@
     #opts3d { display: flex; gap: 12px; flex-wrap: wrap; }
     #opts3d[hidden] { display: none; }
     #opts3d label { grid-template-columns: auto 64px; margin: 0; }
-    #tools3d { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    #tools3d, .g3 { display: contents; }
     #tools3d[hidden] { display: none; }
+    .g3-toggle { display: none; }
+    .g3-toggle::after { content: ' ▾'; }
+    .g3-toggle[aria-expanded=true]::after { content: ' ▴'; }
+    @media (max-width: 800px) {
+      /* phones: each group of 3D controls folds behind its own button */
+      .g3-toggle { display: inline-block; }
+      .g3 { display: none; }
+      .g3.open { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; width: 100%; }
+    }
     #tools3d button.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
     #view3d[aria-pressed=true] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
     #machine[data-mode=edit] { cursor: crosshair; }
@@ -211,14 +220,22 @@
     <section>
       <div class="row" id="view-row"><button class="ghost" id="view3d" aria-pressed="false" title="Alterna entre o desenho 2D e a vista 3D (arraste para girar, roda do mouse para zoom)">Vista 3D</button>
         <span id="opts3d" hidden>
+          <button type="button" class="ghost g3-toggle" aria-expanded="false" aria-controls="g3-cond">Condições</button>
+          <span class="g3" id="g3-cond">
           <label title="Vento soprando de lado (positivo = para a esquerda de quem olha o alvo). Empurra o projétil no voo e durante o giro."><span>Vento lateral (m/s)</span><input type="number" id="wind" aria-label="Vento lateral em metros por segundo" value="0" step="1" min="-20" max="20"></label>
           <label title="Pino de soltura montado fora da linha central do braço: a funda puxa a pedra de lado e o tiro desvia."><span>Pino fora do centro (cm)</span><input type="number" id="pin" aria-label="Deslocamento lateral do pino de soltura em centímetros" value="0" step="1" min="-50" max="50"></label>
           <label title="Gira a máquina inteira em torno da vertical (positivo = para a esquerda de quem olha o alvo): é como a equipe corrige o vento. O alcance e o desvio são medidos na linha do alvo."><span>Mira (°)</span><input type="number" id="aim" aria-label="Mira, giro da máquina em graus" value="0" step="0.5" min="-15" max="15"></label>
+          </span>
+          <button type="button" class="ghost g3-toggle" aria-expanded="false" aria-controls="g3-act">Ações</button>
+          <span class="g3" id="g3-act">
           <button type="button" class="ghost" id="edit3d" title="Volta à pose armada com os nós arrastáveis em 3D">Editar nós</button>
           <button type="button" class="ghost" id="disp3d" title="Dispara 40 vezes com pequenas variações (soltura ±1°, rajadas de 1,5 m/s, pino ±1 cm) e mostra onde caem, com as elipses de 1σ e 2σ">Dispersão</button>
           <button type="button" class="ghost" id="glb3d" title="Baixa as peças sólidas da máquina, na pose mostrada, em glTF (.glb, metros): abre no Blender, em visualizadores 3D e na web">Baixar .glb</button>
           <button type="button" class="ghost" id="stl3d" title="Baixa as peças sólidas da máquina, na pose mostrada, em STL (milímetros): para CAD e impressão 3D">Baixar .stl</button>
-          <span id="tools3d" hidden role="toolbar" aria-label="Ferramentas de construção em 3D">
+          </span>
+          <span id="tools3d" hidden>
+          <button type="button" class="ghost g3-toggle" aria-expanded="false" aria-controls="g3-build">Construir</button>
+          <span class="g3" id="g3-build" role="toolbar" aria-label="Ferramentas de construção em 3D">
             <button type="button" class="ghost on" data-t3="move" title="Gira a vista e move os nós (setas)">Mover</button>
             <button type="button" class="ghost" data-t3="rod" title="Dois cliques: as pontas da barra">Barra</button>
             <button type="button" class="ghost" data-t3="disk" title="Clique: o centro da massa">Massa</button>
@@ -229,6 +246,7 @@
             <button type="button" class="ghost" data-t3="rope" title="Dois cliques: as pontas da corda (sobre peças ou no chão)">Corda</button>
             <button type="button" class="ghost" data-t3="delete" title="Clique: apaga a junta ali, ou a peça de cima">Apagar</button>
             <label title="Profundidade do plano onde os cliques caem (a grade laranja)"><span>Plano z (m)</span><input type="number" id="z3d" aria-label="Profundidade do plano de construção em metros" value="0" step="0.05"></label>
+          </span>
           </span>
           <span id="node3d" class="muted" aria-live="polite"></span>
         </span></div>
