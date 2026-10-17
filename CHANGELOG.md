@@ -4,23 +4,53 @@ Simulador de trebuchets (Vite + TypeScript). Rodar: `npm run dev` · testes: `np
 
 ## Em aberto
 
-### Física / realismo
-1. **Walking arm: 69 m contra 81 m do recorde (Stapleton, 2018).** A bola ainda parte do chão. Testei um apoio no braço (contato unilateral `ledge`), mas a geometria real do suporte não é pública e o modelo não fechou de forma confiável (a bola caía do apoio ou nunca saía dele). Retomar se aparecer a geometria do suporte (fotos ou medidas).
-2. **Simplificações marcadas com `ponytail:` no código.** Rever só se algum resultado parecer fisicamente errado:
-   - sem atrito estático (`solver.ts`, normal defasada);
-   - sem restituição: nada quica;
-   - roletes sem atrito de rolamento (`presets.ts`).
-3. **Tipos não feitos: VLR, Fiffer, Merlin, BAKA.** Não há geometria utilizável nas fontes públicas.
+Só restam itens que dependem de dados que não existem em fonte pública. Retomar se aparecerem medidas.
 
-### Editor / UI
-1. **Tambor desenhado no editor só desenrola com o braço girando no sentido horário**, que é o dos presets. Uma máquina espelhada enrola a corda sem aviso.
-2. **Pontos encaixam na grade de 5 cm.** Uma ponta de mola ou corda presa a uma barra diagonal pode cair fora dela; aparece o anel vermelho de "conexão solta". Isso já acontecia antes com a corda.
+1. **Walking arm: 69 m contra 81 m do recorde (Stapleton, 2018).** A bola ainda parte do chão.
+   - Segunda tentativa com a geometria do próprio autor (Instructables, passos 5 e 9): palitos num parafuso a 4″ do eixo, do lado do dedo, e a bola no canto entre eles e a borda do braço. Está guardada no branch `exp/walking-perch`.
+   - Com funda inextensível e palitos rígidos, a bola fica travada no ninho. Com palitos que cedem (porca borboleta), o melhor ponto de uma varredura dá ~30 m.
+   - O resultado depende do atrito do saquinho, da elasticidade das cordas e do instante em que o laço sai do dedo. Nada disso foi medido.
+2. **Tipos não feitos:**
+   - **VLR:** só há a definição do princípio, sem nenhuma medida.
+   - **Merlin:** braço que corre num trilho em J, montado com hidráulica; nenhuma dimensão publicada.
+   - **BAKA:** a sigla não é definida em nenhuma fonte.
+   - **Fiffer:** a topologia está descrita pelo construtor de um protótipo (vídeo "Fiffer explanation", beardedone85, 2011): viga do contrapeso articulada atrás, duas barras em tesoura empurrando um pino para baixo e para a frente, e uma correia que puxa a ponta curta do braço por um came. Uma reconstrução com proporções estimadas puxava a correia só ~8 cm e travava num ponto morto aos ~41° de queda da viga; um resultado aparentemente bom (~102 m) vinha de energia criada nesse travamento. Falta o arranjo real da tesoura e o raio do came.
 
-### 3D (branch `feat/3d`)
-1. **Levar `feat/3d` para o `main`.** O `main` (até 2794b02) já está mesclado no branch, com as juntas novas do editor (espeto, rolete, piso, mola, tambor) suportadas no `compile3()`. Falta só o fast-forward: `git merge --ff-only feat/3d` no checkout do `main`, quando nenhuma outra sessão estiver editando lá. Uma junta nova no futuro precisa de versão em `src/physics3d/constraints3.ts`, `lift.ts` e `sketch3.ts`, e de um caso no teste de paridade.
-2. **Walking arm sem alças de geometria** no 2D nem no 3D (ele é desenhado já inclinado pelo empurrão de disparo): em 3D só tem o nó do pino.
-3. **O solver 3D roda na thread da página** (0,1–0,5 s por tiro; o walking arm com 1,5 s após a soltura chega perto de 1 s). Movê-lo para o worker se travar a interface.
-4. **Eixos de articulação sempre em z.** Um eixo inclinado (máquina torta de propósito) exigiria editar `axis` no esboço.
+## 2026-10-17: itens em aberto fechados (branch `feat/3d`)
+
+- **Tambor espelhado:** novo campo `Cam.dir` (2D e 3D). O editor escolhe o sentido pelo lado para onde a corda sai (polia ou contrapeso). Um MURLIN espelhado agora derruba o contrapeso exatamente como o original (teste `camdir`).
+- **Encaixe em barras diagonais (editor):** perto de uma barra, o ponto cai sobre ela em vez de no nó da grade (que deixava a junta "solta"). Um nó da grade que já esteja sobre a barra é mantido.
+- **Walking arm com alças:** as alças ficam na pose real (inclinada) e cada uma ajusta um comprimento ou ângulo medido a partir do eixo: braço, braço curto, perna (comprimento e ângulo) e funda. Aplicar cada alça na própria posição devolve os parâmetros exatos.
+- **Mira (3D):** a máquina inteira gira em torno da vertical. A conta é exata: o vento é girado para o referencial da máquina e o ponto de queda é girado de volta.
+  - Campo "Mira (°)" e variável do otimizador (±15°); a vista 3D gira máquina e trajetória e mostra a linha do alvo.
+  - Contra 5 m/s de vento lateral, que o pino sozinho não compensa, ~1° de mira zera o desvio.
+- **Solver 3D num worker:** a página fica bloqueada 3 ms por tiro (antes, ~1 s no walking arm). Um tiro novo cancela o anterior.
+- **Eixo de pino inclinado (3D):** inclinação e guinada por pino no editor livre, até ±45°. Uma guinada de ±2° desvia o tiro de forma simétrica.
+- **Atrito estático:** checado em vez de modelado. Uma suavização de Coulomb 10× mais dura (0,01 → 0,001 m/s) muda o alcance de todos os presets em no máximo 0,019%.
+- **Resistência ao rolamento:** novo parâmetro Crr (padrão 0,003) nos trilhos, guias, rolete e rodas do F2K, nos dois solvers. 2D e 3D seguem iguais (~1e-12).
+  - Com Crr 0,005 o alcance cai 0,4–0,6%; com 0,02, até 4% (FAKA).
+  - No F2K, o passo de 2 ms do otimizador erra 0,26% (carga defasada no rolete; 0,016% no passo da interface de 0,5 ms). A tolerância está documentada no teste.
+- **Restituição:** novo parâmetro e (padrão 0, o baque validado), nos dois solvers.
+  - Validação: uma bola largada de 1 m quica até e²·h com e = 0; 0,5; 0,8.
+  - Só muda o whipper (+3,8% com e = 0,3) e o F2K (+0,7% com e = 0,6), e o campo só aparece nesses dois.
+
+### Números de referência (presets padrão, Crr 0,003)
+
+| Tipo | Alcance | η |
+|---|---|---|
+| fixed | 184 m | 56% |
+| hinged | 225 m | 79% |
+| floating | 258 m | 82% |
+| traction | 217 m | 86% |
+| whipper | 395 m | 73% |
+| walking | 69 m | 71% |
+| murlin | 313 m | 72% |
+| wheel | 270 m | 94% |
+| f2k | 295 m | 70% |
+| fet | 257 m | 82% |
+| ka | 377 m | 62% |
+| faka | 498 m | 85% |
+| spring | 229 m | 83% |
 
 ## 2026-10-16: vista e física 3D (branch `feat/3d`)
 
