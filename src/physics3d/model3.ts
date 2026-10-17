@@ -19,11 +19,11 @@ export type Joint3 =
   | { kind: 'weld'; a: number; pa: V3; b: BodyRef; pb: V3; axis: V3; axisB: V3; angle: number }
   | { kind: 'rope'; a: number; pa: V3; b: BodyRef; pb: V3; length: number }
   | { kind: 'floor'; a: number; pa: V3; y: number; mu?: number }
-  | { kind: 'slider'; a: number; pa: V3; origin: V3; dir: V3; across: V3 } // point on a line: rows along across and dir×across
+  | { kind: 'slider'; a: number; pa: V3; origin: V3; dir: V3; across: V3; mu?: number } // point on a line: rows along across and dir×across; mu = Crr
   | { kind: 'stop'; a: number; b: BodyRef; axisB: V3; angle: number }
   | { kind: 'foot'; a: number; pa: V3; at: V3 }
   | { kind: 'spike'; a: number; pa: V3 }
-  | { kind: 'roller'; a: number; at: V3; n: V3 } // n: the rod face's outward normal, a's frame
+  | { kind: 'roller'; a: number; at: V3; n: V3; mu?: number } // n: the rod face's outward normal, a's frame; mu = Crr
   | Cam3;
 
 export interface Cam3 {

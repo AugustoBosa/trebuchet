@@ -19,6 +19,7 @@ export const LABELS: Record<keyof Params, string> = {
   axleMu: 'Atrito no eixo μ',
   axleRadius: 'Raio do eixo (m)',
   troughMu: 'Atrito na calha μ',
+  rollCrr: 'Resistência ao rolamento das rodas (Crr)',
   cockDeg: 'Ângulo de armação (°)',
   legLength: 'Perna: eixo → espinhos (m)',
   legMass: 'Massa da perna (kg)',
@@ -36,7 +37,7 @@ export const RANGES: Record<keyof Params, [number, number, number]> = {
   pivotHeight: [0.5, 15, 0.1], longArm: [0.2, 20, 0.01], shortArm: [0.05, 8, 0.01], armMass: [0.1, 2000, 0.1],
   cwMass: [1, 20000, 0.1], cwDensity: [1000, 11300, 100], hingeLength: [0.1, 5, 0.05], crewForce: [100, 50000, 100], pullStroke: [0.2, 5, 0.1],
   projMass: [0.01, 200, 0.005], projRadius: [0.01, 0.5, 0.002], slingLength: [0.3, 20, 0.1], releaseDeg: [0, 90, 1],
-  airDensity: [0, 1.5, 0.005], dragCd: [0, 1.5, 0.01], axleMu: [0, 1, 0.01], axleRadius: [0.001, 0.3, 0.001], troughMu: [0, 1, 0.01], cockDeg: [0, 85, 1], legLength: [0.1, 10, 0.01], legMass: [0.1, 500, 0.1],
+  airDensity: [0, 1.5, 0.005], dragCd: [0, 1.5, 0.01], axleMu: [0, 1, 0.01], axleRadius: [0.001, 0.3, 0.001], troughMu: [0, 1, 0.01], rollCrr: [0, 0.05, 0.001], cockDeg: [0, 85, 1], legLength: [0.1, 10, 0.01], legMass: [0.1, 500, 0.1],
   pulleyHeight: [1, 30, 0.1], camStart: [0.02, 3, 0.01], camEnd: [0.01, 3, 0.01], axleLift: [0.05, 5, 0.01], rollerOffset: [0.05, 10, 0.01], springK: [100, 200000, 100], springRest: [0.1, 10, 0.05],
 };
 export const HINTS: Record<keyof Params, string> = {
@@ -58,6 +59,7 @@ export const HINTS: Record<keyof Params, string> = {
   axleMu: 'Atrito no mancal: torque = μ·F·r.',
   axleRadius: 'Eixo mais grosso = mais braço de atrito.',
   troughMu: 'Atrito do projétil deslizando na calha antes de subir.',
+  rollCrr: 'Rodas e roletes rolando nos trilhos: força contrária = Crr × carga. Aço em trilho de aço ≈ 0,001–0,002; rodas de skate ou de madeira ≈ 0,005–0,02.',
   cockDeg: 'Whipper: quanto o braço longo aponta para cima (à frente) ao armar. Walking arm: ângulo da perna em relação à metade de baixo do braço, fixado pela corda de ajuste antes do disparo. Perna baixa demais = a máquina tomba de cara; alta demais = solta cedo ou o contrapeso bate no chão.',
   legLength: 'Walking arm: do eixo aos espinhos. Precisa alcançar o chão com a ponta do braço apoiada; mais longa = perna mais inclinada.',
   legMass: 'Walking arm: a perna também cai e gira, e sua inércia rouba energia.',

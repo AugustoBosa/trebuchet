@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { simulate } from '../src/physics/solver';
 import { build, defaultsFor } from '../src/presets';
 
-const ideal = { airDensity: 0, axleMu: 0, troughMu: 0 };
+const ideal = { airDensity: 0, axleMu: 0, troughMu: 0, rollCrr: 0 };
 
 describe('F2K (eixo flutuante erguido)', () => {
   const p = { ...defaultsFor('f2k'), ...ideal };

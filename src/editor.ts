@@ -412,7 +412,9 @@ export function createEditor(o: {
       if (j.kind === 'pull') html += field('Força da equipe (N)', 'force', j.force) + field('Curso do puxão (m)', 'stroke', j.stroke) +
         `<p class="muted">Uma pessoa puxa ~200–300 N num puxão curto. Energia = força × curso = ${((j.force * j.stroke) / 1000).toFixed(1)} kJ.</p>`;
       if (j.kind === 'rope') html += `<p class="muted">Comprimento: ${d2(j.pa, j.pb).toFixed(2)} m</p>`;
-      if (j.kind === 'floor') html += field('Altura do chão (m)', 'y', j.y);
+      if (j.kind === 'floor') html += field('Altura do chão (m)', 'y', j.y) + field('Atrito ao pousar e deslizar (μ; rodas: Crr)', 'mu', j.mu ?? 0);
+      if (j.kind === 'slider' || j.kind === 'roller') html += field('Resistência ao rolamento (Crr)', 'mu', j.mu ?? 0) +
+        `<p class="muted">Força contra o rolamento = Crr × carga. Rodas duras em trilho ≈ 0,001–0,005; madeira ou skate ≈ 0,005–0,02.</p>`;
       if (j.kind === 'spring') html += field('Rigidez k (N/m)', 'k', j.k) + field('Comprimento livre (m)', 'rest', j.rest) +
         `<p class="muted">Agora: ${d2(j.at, j.anchor).toFixed(2)} m. Energia armazenada: ${((0.5 * j.k * Math.max(0, d2(j.at, j.anchor) - j.rest) ** 2) / 1000).toFixed(2)} kJ.</p>`;
       if (j.kind === 'cam') html += field('Raio inicial (m)', 'r0', j.r0) + field('Raio final (m)', 'r1', j.r1) + field('Giro da espiral (rad)', 'span', j.span) +
@@ -448,7 +450,10 @@ export function createEditor(o: {
         else delete j[k];
       } else if (j.kind === 'pin' && Number.isFinite(num) && num >= 0) j[k as 'mu' | 'radius'] = num;
       if (j.kind === 'pull' && Number.isFinite(num) && num > 0) j[k as 'force' | 'stroke'] = num;
-      if (j.kind === 'floor' && Number.isFinite(num)) j.y = num;
+      if ((j.kind === 'floor' || j.kind === 'slider' || j.kind === 'roller') && k === 'mu' && Number.isFinite(num) && num >= 0) {
+        if (num) j.mu = Math.min(1, num);
+        else delete j.mu;
+      } else if (j.kind === 'floor' && Number.isFinite(num)) j.y = num;
       if (j.kind === 'spring' && Number.isFinite(num) && num > 0) j[k as 'k' | 'rest'] = num;
       if (j.kind === 'cam' && Number.isFinite(num)) {
         if (k === 'over') { if (num > j.at[1]) j.over = [j.at[0] - j.r0, num]; else delete j.over; } // pulley above the drum, over its back side

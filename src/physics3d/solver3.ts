@@ -70,6 +70,21 @@ function addFriction(m: Mechanism3, s: State3, active: boolean[], fric: number[]
       const P = point3(s, j.a, j.pa);
       const sp = Math.hypot(P.vel[0], P.vel[2]);
       if (sp > 0) addForce(F, j.a, P.r, [(-mag * Math.tanh(sp / V_SLIP) * P.vel[0]) / sp, 0, (-mag * Math.tanh(sp / V_SLIP) * P.vel[2]) / sp]);
+    } else if (j.kind === 'slider' || j.kind === 'roller') {
+      // rolling resistance against the motion along the track (slider) or along the rod over the roller
+      let r: V3, vel: V3, e: V3;
+      if (j.kind === 'slider') {
+        const P = point3(s, j.a, j.pa);
+        const L = Math.hypot(...j.dir);
+        (r = P.r), (vel = P.vel), (e = [j.dir[0] / L, j.dir[1] / L, j.dir[2] / L]);
+      } else {
+        const i = 7 * j.a, k = 6 * j.a;
+        r = [j.at[0] - s.q[i], j.at[1] - s.q[i + 1], j.at[2] - s.q[i + 2]];
+        const wr = cross(omega(s, j.a), r);
+        (vel = [s.v[k] + wr[0], s.v[k + 1] + wr[1], s.v[k + 2] + wr[2]]), (e = worldAxis(s, j.a, [1, 0, 0]));
+      }
+      const f = -mag * Math.tanh(dot(vel, e) / V_SLIP);
+      addForce(F, j.a, r, [f * e[0], f * e[1], f * e[2]]);
     }
   });
 }
@@ -82,6 +97,8 @@ export function frictionMagnitudes3(m: Mechanism3, lambda: number[][]): number[]
   return m.joints.map((j, ji) => {
     if (j.kind === 'pin' && j.friction) return j.friction.mu * j.friction.radius * load(j, lambda[ji]);
     if (j.kind === 'floor' && j.mu) return j.mu * Math.max(0, lambda[ji][0] ?? 0);
+    if (j.kind === 'roller' && j.mu) return j.mu * Math.max(0, lambda[ji][0] ?? 0);
+    if (j.kind === 'slider' && j.mu) return j.mu * Math.hypot(...lambda[ji]);
     return 0;
   });
 }

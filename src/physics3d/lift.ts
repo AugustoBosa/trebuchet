@@ -28,14 +28,14 @@ export function lift(m: Mechanism): Mechanism3 {
         return { ...j, pa: v3(j.pa) };
       case 'slider': {
         const L = Math.hypot(...j.dir);
-        return { kind: 'slider', a: j.a, pa: v3(j.pa), origin: v3(j.origin), dir: v3(j.dir), across: [-j.dir[1] / L, j.dir[0] / L, 0] };
+        return { kind: 'slider', a: j.a, pa: v3(j.pa), origin: v3(j.origin), dir: v3(j.dir), across: [-j.dir[1] / L, j.dir[0] / L, 0], ...(j.mu ? { mu: j.mu } : {}) };
       }
       case 'stop':
         return { ...j, axisB: Z };
       case 'foot':
         return { ...j, pa: v3(j.pa), at: v3(j.at) };
       case 'roller':
-        return { kind: 'roller', a: j.a, at: v3(j.at), n: [0, j.side, 0] };
+        return { kind: 'roller', a: j.a, at: v3(j.at), n: [0, j.side, 0], ...(j.mu ? { mu: j.mu } : {}) };
       case 'cam':
         return { ...j, hub: v3(j.hub), axis: Z, over: j.over && v3(j.over) };
     }

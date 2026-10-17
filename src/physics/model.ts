@@ -17,11 +17,11 @@ export type Joint =
   | { kind: 'weld'; a: number; pa: Vec; b: BodyRef; pb: Vec; angle: number } // keeps θa - θb = angle
   | { kind: 'rope'; a: number; pa: Vec; b: BodyRef; pb: Vec; length: number }
   | { kind: 'floor'; a: number; pa: Vec; y: number; mu?: number } // unilateral: point can lift off, never sink
-  | { kind: 'slider'; a: number; pa: Vec; origin: Vec; dir: Vec } // point rides a fixed straight track (rollers)
+  | { kind: 'slider'; a: number; pa: Vec; origin: Vec; dir: Vec; mu?: number } // point rides a fixed straight track (rollers); mu = rolling resistance Crr
   | { kind: 'stop'; a: number; b: BodyRef; angle: number } // unilateral: θa − θb ≥ angle (a part resting against another, e.g. a counterweight lying on the arm)
   | { kind: 'foot'; a: number; pa: Vec; at: Vec } // spiked foot: pinned to the ground point `at` (no slip) until it would have to pull down, then lifts off
   | { kind: 'spike'; a: number; pa: Vec } // spikes in the air: become a 'foot' wherever they first touch the ground
-  | { kind: 'roller'; a: number; at: Vec; side: 1 | -1 } // rod a rests on a fixed roller at `at`: slides over it freely, may lift off (side: which face of the rod touches)
+  | { kind: 'roller'; a: number; at: Vec; side: 1 | -1; mu?: number } // rod a rests on a fixed roller at `at`: slides over it freely, may lift off (side: which face of the rod touches)
   | Cam;
 
 // Counterweight rope wound on a spiral drum fixed to body b (MURLIN nodes, wheel trebuchet). As b turns forward

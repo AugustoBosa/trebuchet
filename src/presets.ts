@@ -30,6 +30,7 @@ export const defaults = {
   camEnd: 0.2, // ... and where it ends, when the counterweight lands
   axleLift: 0.6, // F2K: how far above the track the axle wheels start
   rollerOffset: 0.5, // F2K: fixed roller under the arm, this far from the axle toward the long end
+  rollCrr: 0.003, // wheels on their track (floating arms, F2K roller): rolling resistance (hard wheels on a rail ≈ 0.001–0.005)
   springK: 7000, // spring trebuchet: total stiffness of the springs (N/m)
   springRest: 1.5, // ... and their unstretched length (m), anchored on the ground under the short arm
 };
@@ -54,7 +55,7 @@ export const KINDS: Record<Kind, { label: string; info: string; fields: (keyof P
   floating: {
     label: 'Floating arm',
     info: 'Design moderno: o contrapeso desce numa guia vertical e o eixo rola num trilho horizontal. Quase toda a queda vira energia útil.',
-    fields: [...BASE, 'cwMass', 'cwDensity', ...SHOT],
+    fields: [...BASE, 'cwMass', 'cwDensity', 'rollCrr', ...SHOT],
   },
   traction: {
     label: 'Tração humana',
@@ -99,14 +100,14 @@ export const KINDS: Record<Kind, { label: string; info: string; fields: (keyof P
   f2k: {
     label: 'F2K',
     info: 'Floating Axle Trebuchet 2000: um floating arm cujas rodas do eixo começam erguidas acima do trilho. No início o braço se apoia num rolete fixo e gira sobre ele enquanto o contrapeso desce na guia; quando as rodas pousam no trilho (com tranco), segue como floating arm. Ganha queda extra do contrapeso e alcance; o pouso custa eficiência, e quanto depende da geometria: com o rolete a 0,5 m (padrão) o tranco leva ~13% da energia, com o rolete a 1 m o pouso é suave e a eficiência passa a do floating arm. Só o princípio é documentado (The Hurl): posição do rolete e altura inicial reconstruídas.',
-    fields: [...BASE, 'axleLift', 'rollerOffset', 'cwMass', 'cwDensity', ...SHOT],
+    fields: [...BASE, 'axleLift', 'rollerOffset', 'cwMass', 'cwDensity', 'rollCrr', ...SHOT],
     // the floating arm's default geometry, so the two compare like for like
     preset: { pivotHeight: defaults.pivotHeight, longArm: defaults.longArm, shortArm: defaults.shortArm, armMass: defaults.armMass, slingLength: defaults.slingLength, releaseDeg: defaults.releaseDeg, axleLift: defaults.axleLift, rollerOffset: defaults.rollerOffset },
   },
   fet: {
     label: 'FET (tudo flutua)',
     info: 'Floating Everything Trebuchet: um floating arm sem a guia vertical do contrapeso. Eixo rola no trilho e o contrapeso pende livre da ponta do braço curto; como nada empurra o conjunto na horizontal, o contrapeso pesado cai quase na vertical sozinho, e o braço leve é que se desloca. Mais compacto que o floating arm; no real, mais sujeito a descarrilar.',
-    fields: [...BASE, 'cwMass', 'cwDensity', ...SHOT],
+    fields: [...BASE, 'cwMass', 'cwDensity', 'rollCrr', ...SHOT],
   },
   ka: {
     label: 'King Arthur',
@@ -119,7 +120,7 @@ export const KINDS: Record<Kind, { label: string; info: string; fields: (keyof P
   faka: {
     label: 'FAKA (King Arthur flutuante)',
     info: 'Floating Axle King Arthur (C. Macomber, 2006): o King Arthur com o eixo sobre rodas, livre para rolar para a frente e para trás num trilho no alto da estrutura. Junta a queda enorme do King Arthur com a eficiência do eixo flutuante. No real, nada absorve a energia que sobra: as rodas batem nos batentes e o braço pode descarrilar se o ajuste estiver errado (aqui o trilho não tem fim; no ajuste padrão o eixo rola ~1,3 m).',
-    fields: [...BASE, 'cwMass', 'cwDensity', 'hingeLength', 'cockDeg', ...SHOT],
+    fields: [...BASE, 'cwMass', 'cwDensity', 'hingeLength', 'cockDeg', 'rollCrr', ...SHOT],
     // King Arthur's frame; sling/release/arm angle re-optimized (≈499 m, η ≈ 85 %; the axle rolls ~1.3 m)
     preset: { pivotHeight: 5.3, cockDeg: 37, slingLength: 6.2, releaseDeg: 39, hingeLength: defaults.hingeLength, shortArm: defaults.shortArm, longArm: defaults.longArm },
   },
@@ -201,11 +202,10 @@ export function build(kind: Kind, p: Params): Mechanism {
   };
 
   if (kind === 'floating' || kind === 'fet') {
-    joints.push({ kind: 'slider', a: ARM, pa: local.pivot, origin: pivot, dir: [1, 0] }); // axle rolls on a horizontal track
+    joints.push({ kind: 'slider', a: ARM, pa: local.pivot, origin: pivot, dir: [1, 0], mu: p.rollCrr }); // axle rolls on a horizontal track
     const cw = addCW(shortTip);
     joints.push({ kind: 'pin', a: cw, pa: [0, 0], b: ARM, pb: local.short });
-    if (kind === 'floating') joints.push({ kind: 'slider', a: cw, pa: [0, 0], origin: shortTip, dir: [0, 1] }); // vertical guide
-    // ponytail: rollers are frictionless; add rolling resistance to 'slider' if it matters
+    if (kind === 'floating') joints.push({ kind: 'slider', a: cw, pa: [0, 0], origin: shortTip, dir: [0, 1], mu: p.rollCrr }); // vertical guide
     return m;
   }
 
@@ -215,12 +215,12 @@ export function build(kind: Kind, p: Params): Mechanism {
     if (p.rollerOffset <= 0 || p.rollerOffset >= L1 - 0.1) throw new Error('O rolete precisa ficar sob o braço longo, entre o eixo e a ponta');
     const roller: Vec = [pivot[0] + p.rollerOffset * u[0], pivot[1] + p.rollerOffset * u[1]];
     // the arm lies on top of the roller: pick the rod face whose normal points up
-    joints.push({ kind: 'roller', a: ARM, at: roller, side: u[0] <= 0 ? -1 : 1 });
+    joints.push({ kind: 'roller', a: ARM, at: roller, side: u[0] <= 0 ? -1 : 1, mu: p.rollCrr });
     m.axle = joints.length;
-    joints.push({ kind: 'floor', a: ARM, pa: local.pivot, y: p.pivotHeight }); // wheels on the track (start open)
+    joints.push({ kind: 'floor', a: ARM, pa: local.pivot, y: p.pivotHeight, mu: p.rollCrr }); // wheels on the track (start open)
     const cw = addCW(shortTip);
     joints.push({ kind: 'pin', a: cw, pa: [0, 0], b: ARM, pb: local.short });
-    joints.push({ kind: 'slider', a: cw, pa: [0, 0], origin: shortTip, dir: [0, 1] }); // vertical guide
+    joints.push({ kind: 'slider', a: cw, pa: [0, 0], origin: shortTip, dir: [0, 1], mu: p.rollCrr }); // vertical guide
     return m;
   }
 
@@ -243,7 +243,7 @@ export function build(kind: Kind, p: Params): Mechanism {
     return m;
   }
 
-  if (kind === 'faka') joints.push({ kind: 'slider', a: ARM, pa: local.pivot, origin: pivot, dir: [1, 0] }); // axle trucks roll on a track
+  if (kind === 'faka') joints.push({ kind: 'slider', a: ARM, pa: local.pivot, origin: pivot, dir: [1, 0], mu: p.rollCrr }); // axle trucks roll on a track
   else if (kind !== 'walking') joints.push({ kind: 'pin', a: ARM, pa: local.pivot, b: 'ground', pb: pivot, friction: axleFriction }); // axle
   if (kind === 'fixed') {
     const cw = addCW(shortTip);

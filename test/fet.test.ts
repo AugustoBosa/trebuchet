@@ -3,7 +3,7 @@ import { simulate } from '../src/physics/solver';
 import { build, defaultsFor } from '../src/presets';
 
 it('FET sem atrito: nada empurra o conjunto na horizontal, então o momento horizontal total fica em zero', () => {
-  const m = build('fet', { ...defaultsFor('fet'), airDensity: 0, axleMu: 0, troughMu: 0 });
+  const m = build('fet', { ...defaultsFor('fet'), airDensity: 0, axleMu: 0, troughMu: 0, rollCrr: 0 });
   const r = simulate(m, { afterRelease: 0, frameEvery: 1 });
   expect(r.error).toBeUndefined();
   const scale = m.bodies[m.counterweight!].mass * 5; // ~ counterweight at a few m/s

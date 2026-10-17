@@ -31,7 +31,7 @@ describe('motor', () => {
   });
 
   it('trebuchet sem ar conserva energia até a liberação (deriva < 0,1%)', () => {
-    const m = build('fixed', { ...defaults, airDensity: 0, axleMu: 0, troughMu: 0 });
+    const m = build('fixed', { ...defaults, airDensity: 0, axleMu: 0, troughMu: 0, rollCrr: 0 });
     const r = simulate(m, { afterRelease: 0, frameEvery: 1 });
     expect(r.error).toBeUndefined();
     const e = r.frames.map((f) => f.ke + f.pe);
@@ -50,7 +50,7 @@ describe('motor', () => {
   });
 
   it('atrito só dissipa: energia nunca sobe e a eficiência cai', () => {
-    const noFric = simulate(build('fixed', { ...defaults, airDensity: 0, axleMu: 0, troughMu: 0 }), { afterRelease: 0 });
+    const noFric = simulate(build('fixed', { ...defaults, airDensity: 0, axleMu: 0, troughMu: 0, rollCrr: 0 }), { afterRelease: 0 });
     const fric = simulate(build('fixed', { ...defaults, airDensity: 0, axleMu: 0.3, troughMu: 0.5 }), { afterRelease: 0, frameEvery: 1 });
     expect(fric.error).toBeUndefined();
     const e = fric.frames.map((f) => f.ke + f.pe);
@@ -60,11 +60,11 @@ describe('motor', () => {
     expect(fric.efficiency).toBeLessThan(noFric.efficiency);
   });
 
-  const ideal = { ...defaults, airDensity: 0, axleMu: 0, troughMu: 0 };
+  const ideal = { ...defaults, airDensity: 0, axleMu: 0, troughMu: 0, rollCrr: 0 };
   const kinds = Object.keys(KINDS) as Kind[];
 
   it.each(kinds)('%s: sem atrito nem ar, energia fecha o balanço e 0 < η < 1', (kind) => {
-    const p = { ...defaultsFor(kind), airDensity: 0, axleMu: 0, troughMu: 0 };
+    const p = { ...defaultsFor(kind), airDensity: 0, axleMu: 0, troughMu: 0, rollCrr: 0 };
     const r = simulate(build(kind, p), { afterRelease: 0 });
     expect(r.error).toBeUndefined();
     // the whipper's sling goes slack and re-tensions, and its counterweight lands on the arm; the F2K's wheels land
@@ -112,7 +112,9 @@ describe('motor', () => {
     const ref = simulate(build(kind, defaultsFor(kind)), { afterRelease: 0, frameEvery: 1e9, dt: 1e-4 }).range;
     const fast = simulate(build(kind, defaultsFor(kind)), { afterRelease: 0, frameEvery: 1e9, dt: 2e-3 }).range;
     // impacts land on step boundaries; the walking arm's sling twitch after the spikes bite shifts by a step at 2 ms
-    // (0.34 %; 0.003 % at the UI's 0.5 ms). The optimizer re-runs its pick at full accuracy, so that is fine.
-    expect(Math.abs(fast - ref) / ref).toBeLessThan(kind === 'walking' ? 5e-3 : 1e-3);
+    // (0.34 %; 0.003 % at the UI's 0.5 ms). F2K: the roller's rolling resistance uses the previous step's normal force,
+    // and the load on the roller changes fast (0.26 % at 2 ms; 0.016 % at 0.5 ms). The optimizer re-runs its pick at
+    // full accuracy, so that is fine.
+    expect(Math.abs(fast - ref) / ref).toBeLessThan(kind === 'walking' || kind === 'f2k' ? 5e-3 : 1e-3);
   });
 });
