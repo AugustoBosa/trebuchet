@@ -17,7 +17,7 @@ Simulador de trebuchets (Vite + TypeScript). Rodar: `npm run dev` · testes: `np
 2. **Pontos encaixam na grade de 5 cm.** Uma ponta de mola ou corda presa a uma barra diagonal pode cair fora dela; aparece o anel vermelho de "conexão solta". Isso já acontecia antes com a corda.
 
 ### 3D (branch `feat/3d`)
-1. **Merge com `main`.** A outra sessão mexe em `main.ts`, `editor.ts`, `sketch.ts` e `solver.ts`. Se ela trouxer uma junta nova (ex.: `ledge`), ela precisa de uma versão em `src/physics3d/constraints3.ts` e em `lift.ts`, e de um caso no teste de paridade.
+1. **Levar `feat/3d` para o `main`.** O `main` (até 2794b02) já está mesclado no branch, com as juntas novas do editor (espeto, rolete, piso, mola, tambor) suportadas no `compile3()`. Falta só o fast-forward: `git merge --ff-only feat/3d` no checkout do `main`, quando nenhuma outra sessão estiver editando lá. Uma junta nova no futuro precisa de versão em `src/physics3d/constraints3.ts`, `lift.ts` e `sketch3.ts`, e de um caso no teste de paridade.
 2. **Walking arm sem alças de geometria** no 2D nem no 3D (ele é desenhado já inclinado pelo empurrão de disparo): em 3D só tem o nó do pino.
 3. **O solver 3D roda na thread da página** (0,1–0,5 s por tiro; o walking arm com 1,5 s após a soltura chega perto de 1 s). Movê-lo para o worker se travar a interface.
 4. **Eixos de articulação sempre em z.** Um eixo inclinado (máquina torta de propósito) exigiria editar `axis` no esboço.
