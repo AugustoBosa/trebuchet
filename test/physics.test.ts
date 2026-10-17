@@ -112,9 +112,9 @@ describe('motor', () => {
     const ref = simulate(build(kind, defaultsFor(kind)), { afterRelease: 0, frameEvery: 1e9, dt: 1e-4 }).range;
     const fast = simulate(build(kind, defaultsFor(kind)), { afterRelease: 0, frameEvery: 1e9, dt: 2e-3 }).range;
     // impacts land on step boundaries; the walking arm's sling twitch after the spikes bite shifts by a step at 2 ms
-    // (0.34 %; 0.003 % at the UI's 0.5 ms). F2K: the roller's rolling resistance uses the previous step's normal force,
-    // and the load on the roller changes fast (0.26 % at 2 ms; 0.016 % at 0.5 ms). The optimizer re-runs its pick at
-    // full accuracy, so that is fine.
+    // (0.34 %; 0.003 % at the UI's 0.5 ms). F2K: when the arm starts sliding over its roller, the tanh-regularized
+    // rolling resistance flips over ~1 ms (V_SLIP / acceleration), which a 2 ms step can't resolve: 0.29 % (0.03 % with
+    // Crr = 0, 0.05 % at the UI's 0.5 ms). The optimizer re-runs its pick at full accuracy, so that is fine.
     expect(Math.abs(fast - ref) / ref).toBeLessThan(kind === 'walking' || kind === 'f2k' ? 5e-3 : 1e-3);
   });
 });

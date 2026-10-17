@@ -3,7 +3,7 @@ import { bounceRow, reboundOpen, solve } from '../physics/solver';
 import { fly3 } from './ballistics3';
 import { anchor3, bendingPeak3 } from './bending3';
 import { jointRows3, omega, point3, worldAxis, type Row3, type State3 } from './constraints3';
-import { cross, dot, rotate, rotateInv, type Joint3, type Mechanism3, type V3 } from './model3';
+import { cross, dot, rotate, rotateInv, sub, type Joint3, type Mechanism3, type V3 } from './model3';
 
 // Same method as physics/solver.ts (acceleration-level multipliers + Baumgarte, RK4, inelastic impacts, release
 // by velocity angle), with 6-DOF bodies: M⁻¹ is block-diagonal (1/m, R·I⁻¹·Rᵀ) and the gyroscopic torque −ω×(Iω)
@@ -54,75 +54,88 @@ function addForce(F: Float64Array, b: number, r: V3, f: V3) {
   for (let c = 0; c < 3; c++) (F[6 * b + c] += f[c]), (F[6 * b + 3 + c] += t[c]);
 }
 
-// Coulomb friction from the previous step's normal force (same lagged approximation as the planar solver)
-function addFriction(m: Mechanism3, s: State3, active: boolean[], fric: number[], F: Float64Array) {
+// Coulomb friction folded into the joints' columns, Ĵ = J + c·D, exactly as in the planar solver (see there).
+function frictionColumns3(m: Mechanism3, s: State3, active: boolean[], prev: number[][], n: number) {
+  const cols = new Map<number, { c: number[]; D: Float64Array }>();
+  const force = (D: Float64Array, b: number, r: V3, f: V3) => {
+    const t = cross(r, f);
+    for (let k = 0; k < 3; k++) (D[6 * b + k] += f[k]), (D[6 * b + 3 + k] += t[k]);
+  };
   m.joints.forEach((j, ji) => {
-    const mag = fric[ji];
-    if (!mag || !active[ji]) return;
-    if (j.kind === 'pin') {
-      const n = worldAxis(s, j.b, j.axisB);
-      const wa = omega(s, j.a), wb = omega(s, j.b);
-      const tau = mag * Math.tanh(dot(n, [wa[0] - wb[0], wa[1] - wb[1], wa[2] - wb[2]]) / V_SLIP);
-      for (let c = 0; c < 3; c++) {
-        F[6 * j.a + 3 + c] -= tau * n[c];
-        if (j.b !== 'ground') F[6 * j.b + 3 + c] += tau * n[c];
+    if (!active[ji]) return;
+    const D = new Float64Array(n);
+    let c: number[] | undefined;
+    if (j.kind === 'pin' && j.friction) {
+      const l = (prev[ji] ?? []).slice(0, 3), L = Math.hypot(...l);
+      if (!L) return;
+      const k = j.friction.mu * j.friction.radius;
+      c = l.map((x) => (k * x) / L); // |F| ≈ û·F, û = previous reaction direction (torque rows get 0)
+      const nAx = worldAxis(s, j.b, j.axisB), wa = omega(s, j.a), wb = omega(s, j.b);
+      const t = Math.tanh(dot(nAx, sub(wa, wb)) / V_SLIP);
+      for (let q = 0; q < 3; q++) {
+        D[6 * j.a + 3 + q] = -t * nAx[q];
+        if (j.b !== 'ground') D[6 * j.b + 3 + q] = t * nAx[q];
       }
-    } else if (j.kind === 'floor') {
+    } else if (j.kind === 'floor' && j.mu) {
       const P = point3(s, j.a, j.pa);
       const sp = Math.hypot(P.vel[0], P.vel[2]);
-      if (sp > 0) addForce(F, j.a, P.r, [(-mag * Math.tanh(sp / V_SLIP) * P.vel[0]) / sp, 0, (-mag * Math.tanh(sp / V_SLIP) * P.vel[2]) / sp]);
-    } else if (j.kind === 'slider' || j.kind === 'roller') {
-      // rolling resistance against the motion along the track (slider) or along the rod over the roller
+      if (!sp) return;
+      const t = Math.tanh(sp / V_SLIP) / sp;
+      c = [j.mu];
+      force(D, j.a, P.r, [-t * P.vel[0], 0, -t * P.vel[2]]);
+    } else if ((j.kind === 'slider' || j.kind === 'roller') && j.mu) {
       let r: V3, vel: V3, e: V3;
       if (j.kind === 'slider') {
         const P = point3(s, j.a, j.pa);
         const L = Math.hypot(...j.dir);
         (r = P.r), (vel = P.vel), (e = [j.dir[0] / L, j.dir[1] / L, j.dir[2] / L]);
+        const l = prev[ji] ?? [], Ll = Math.hypot(l[0] ?? 0, l[1] ?? 0);
+        if (!Ll) return;
+        c = [(j.mu * l[0]) / Ll, (j.mu * (l[1] ?? 0)) / Ll]; // |F| ≈ û·F over the track's two normal rows
       } else {
-        const i = 7 * j.a, k = 6 * j.a;
+        const i = 7 * j.a, k6 = 6 * j.a;
         r = [j.at[0] - s.q[i], j.at[1] - s.q[i + 1], j.at[2] - s.q[i + 2]];
         const wr = cross(omega(s, j.a), r);
-        (vel = [s.v[k] + wr[0], s.v[k + 1] + wr[1], s.v[k + 2] + wr[2]]), (e = worldAxis(s, j.a, [1, 0, 0]));
+        (vel = [s.v[k6] + wr[0], s.v[k6 + 1] + wr[1], s.v[k6 + 2] + wr[2]]), (e = worldAxis(s, j.a, [1, 0, 0]));
+        c = [j.mu];
       }
-      const f = -mag * Math.tanh(dot(vel, e) / V_SLIP);
-      addForce(F, j.a, r, [f * e[0], f * e[1], f * e[2]]);
+      const t = -Math.tanh(dot(vel, e) / V_SLIP);
+      force(D, j.a, r, [t * e[0], t * e[1], t * e[2]]);
     }
+    if (c) cols.set(ji, { c, D });
   });
+  return cols;
 }
 
 // hinges carry 3 force rows then 2 torque rows: only the forces count as the joint's load
 const forceRows = (j: Joint3) => (j.kind === 'pin' || j.kind === 'weld' ? 3 : Infinity);
 const load = (j: Joint3, l: number[]) => Math.hypot(...l.slice(0, forceRows(j)));
 
-export function frictionMagnitudes3(m: Mechanism3, lambda: number[][]): number[] {
-  return m.joints.map((j, ji) => {
-    if (j.kind === 'pin' && j.friction) return j.friction.mu * j.friction.radius * load(j, lambda[ji]);
-    if (j.kind === 'floor' && j.mu) return j.mu * Math.max(0, lambda[ji][0] ?? 0);
-    if (j.kind === 'roller' && j.mu) return j.mu * Math.max(0, lambda[ji][0] ?? 0);
-    if (j.kind === 'slider' && j.mu) return j.mu * Math.hypot(...lambda[ji]);
-    return 0;
-  });
-}
-
-function collectRows(m: Mechanism3, s: State3, active: boolean[]) {
+// fric: friction columns (accelerations only); then A = J M⁻¹ Ĵᵀ and Y = M⁻¹ Ĵᵀ
+function collectRows(m: Mechanism3, s: State3, active: boolean[], fric?: Map<number, { c: number[]; D: Float64Array }>) {
   const rows: Row3[] = [];
   const owner: number[] = [];
   m.joints.forEach((j, ji) => active[ji] && jointRows3(s, j, m.bodies.length).forEach((r) => (rows.push(r), owner.push(ji))));
-  const bodies = rows.map((r) => bodiesOf(r.J));
-  const Y = rows.map((r, i) => minv(m, s, r.J, bodies[i])); // M⁻¹Jᵢᵀ
+  const Jh = rows.map((r, i) => {
+    const col = fric?.get(owner[i]);
+    const cr = col?.c[i - owner.indexOf(owner[i])] ?? 0;
+    return cr ? r.J.map((x, c) => x + cr * col!.D[c]) : r.J;
+  });
+  const bodies = Jh.map((J) => bodiesOf(J));
+  const Y = Jh.map((J, i) => minv(m, s, J, bodies[i])); // M⁻¹Ĵᵢᵀ
   const A = rows.map(() => new Float64Array(rows.length));
   for (let i = 0; i < rows.length; i++) {
-    for (let j = i; j < rows.length; j++) {
+    for (let j = 0; j < rows.length; j++) {
       let sum = 0;
-      for (const b of bodies[i]) for (let c = 6 * b; c < 6 * b + 6; c++) sum += rows[j].J[c] * Y[i][c];
-      A[i][j] = A[j][i] = sum;
+      for (const b of bodies[j]) for (let c = 6 * b; c < 6 * b + 6; c++) sum += rows[i].J[c] * Y[j][c];
+      A[i][j] = sum;
     }
     A[i][i] += 1e-10 * A[i][i] + 1e-14; // redundant rows (a hinge loop) stay solvable
   }
   return { rows, owner, Y, A };
 }
 
-export function accelerations3(m: Mechanism3, s: State3, active: boolean[], fric: number[] = []) {
+export function accelerations3(m: Mechanism3, s: State3, active: boolean[], prev: number[][] = []) {
   const nb = m.bodies.length;
   const F = new Float64Array(6 * nb);
   m.bodies.forEach((b, i) => {
@@ -135,7 +148,6 @@ export function accelerations3(m: Mechanism3, s: State3, active: boolean[], fric
   const rel: V3 = [s.v[p] - wind[0], s.v[p + 1] - wind[1], s.v[p + 2] - wind[2]];
   const kd = dragK3(m) * m.bodies[m.projectile].mass * Math.hypot(...rel);
   for (let c = 0; c < 3; c++) F[p + c] -= kd * rel[c];
-  addFriction(m, s, active, fric, F);
   for (const pl of m.pulls ?? []) {
     const P = point3(s, pl.body, pl.local);
     if (P.p[1] > pl.untilY) addForce(F, pl.body, P.r, [0, -pl.force, 0]);
@@ -147,7 +159,7 @@ export function accelerations3(m: Mechanism3, s: State3, active: boolean[], fric
     if (L > sp.rest) addForce(F, sp.body, P.r, [(sp.k * (L - sp.rest) * d[0]) / L, (sp.k * (L - sp.rest) * d[1]) / L, (sp.k * (L - sp.rest) * d[2]) / L]);
   }
 
-  const { rows, owner, Y, A } = collectRows(m, s, active);
+  const { rows, owner, Y, A } = collectRows(m, s, active, frictionColumns3(m, s, active, prev, 6 * nb));
   const a = minv(m, s, F, m.bodies.keys());
   const rhs = rows.map((r) => r.bias - 2 * STAB * r.Cdot - STAB * STAB * r.C - r.J.reduce((acc, x, c) => acc + x * a[c], 0));
   const lam = solve(A, Float64Array.from(rhs));
@@ -212,15 +224,15 @@ function impulse(m: Mechanism3, s: State3, active: boolean[], mode: 'settle' | '
   return { q: s.q, v: s.v.map((x, c) => x + d[c]) };
 }
 
-function rk4(m: Mechanism3, s: State3, active: boolean[], fric: number[], dt: number, a1In?: Float64Array): State3 {
+function rk4(m: Mechanism3, s: State3, active: boolean[], prev: number[][], dt: number, a1In?: Float64Array): State3 {
   const stage = (v: Float64Array, a: Float64Array, h: number): State3 => ({ q: applyDelta(s.q, v, h), v: s.v.map((x, c) => x + h * a[c]) });
-  const a1 = a1In ?? accelerations3(m, s, active, fric).a;
+  const a1 = a1In ?? accelerations3(m, s, active, prev).a;
   const s2 = stage(s.v, a1, dt / 2);
-  const a2 = accelerations3(m, s2, active, fric).a;
+  const a2 = accelerations3(m, s2, active, prev).a;
   const s3 = stage(s2.v, a2, dt / 2);
-  const a3 = accelerations3(m, s3, active, fric).a;
+  const a3 = accelerations3(m, s3, active, prev).a;
   const s4 = stage(s3.v, a3, dt);
-  const a4 = accelerations3(m, s4, active, fric).a;
+  const a4 = accelerations3(m, s4, active, prev).a;
   // the RK4 blend of the stage velocities, applied as one increment (ponytail: exact while each body keeps its spin
   // axis during a step; a tumbling body would want a Lie-group RK4 (RKMK) if precision there ever matters)
   const vBlend = s.v.map((x, c) => (x + 2 * s2.v[c] + 2 * s3.v[c] + s4.v[c]) / 6);
@@ -281,7 +293,7 @@ export function simulate3(m: Mechanism3, opts: { dt?: number; tMax?: number; fra
   if (opts.v0) s.v.set(opts.v0);
   if (m.joints.some((j) => j.kind === 'spike' || j.kind === 'foot')) m = { ...m, joints: [...m.joints] };
   const active = m.joints.map((j) => j.kind !== 'spike' && !(contactSign(j) * jointRows3(s, j, nb)[normalRow(j)].C > 1e-6));
-  let fric: number[] = [];
+  let prev: number[][] = []; // last step's multipliers (friction directions, track sides)
   const e0 = energy3(m, s);
   const y0p = s.q[7 * P + 1];
   const cw = m.counterweight;
@@ -292,7 +304,7 @@ export function simulate3(m: Mechanism3, opts: { dt?: number; tMax?: number; fra
 
   for (let step = 0, t = 0; t < tMax; step++, t = step * dt) {
     if (res.release && t > res.release.t + afterRelease) break;
-    let { a: a1, lambda } = accelerations3(m, s, active, fric);
+    let { a: a1, lambda } = accelerations3(m, s, active, prev);
     if (step % frameEvery === 0) {
       const forces = lambda.map((l, ji) => load(m.joints[ji], l));
       frames.push({ t, q: s.q.slice(), v: s.v.slice(), ...energy3(m, s), forces, speed: Math.hypot(s.v[6 * P], s.v[6 * P + 1], s.v[6 * P + 2]) });
@@ -308,10 +320,10 @@ export function simulate3(m: Mechanism3, opts: { dt?: number; tMax?: number; fra
       if (contactSign(j) * lambda[ji][normalRow(j)] < 0) (active[ji] = false), (liftOff = true);
       else if (!res.release) peakForce[ji] = Math.max(peakForce[ji], load(j, lambda[ji]));
     });
-    fric = frictionMagnitudes3(m, lambda);
-    if (liftOff) a1 = accelerations3(m, s, active, fric).a;
+    prev = lambda;
+    if (liftOff) a1 = accelerations3(m, s, active, prev).a;
     const before = s;
-    s = rk4(m, s, active, fric, dt, a1);
+    s = rk4(m, s, active, prev, dt, a1);
     m.joints.forEach((j, ji) => {
       if (j.kind === 'foot' && !active[ji]) m.joints[ji] = { kind: 'floor', a: j.a, pa: j.pa, y: 0 };
     });
