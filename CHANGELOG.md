@@ -16,6 +16,18 @@ Só restam itens que dependem de dados que não existem em fonte pública. Retom
    - **BAKA:** a sigla não é definida em nenhuma fonte.
    - **Fiffer:** a topologia está descrita pelo construtor de um protótipo (vídeo "Fiffer explanation", beardedone85, 2011): viga do contrapeso articulada atrás, duas barras em tesoura empurrando um pino para baixo e para a frente, e uma correia que puxa a ponta curta do braço por um came. Uma reconstrução com proporções estimadas puxava a correia só ~8 cm e travava num ponto morto aos ~41° de queda da viga; um resultado aparentemente bom (~102 m) vinha de energia criada nesse travamento. Falta o arranjo real da tesoura e o raio do came.
 
+## 2026-10-17: precisão do otimizador, barra 3D no celular, teclado no 3D
+
+- **Impactos no instante certo (2D e 3D).** Quando um contato fecha no meio de um passo, a simulação volta ao instante do toque (interpolando no passo), aplica o impacto ali e completa o passo.
+  - Erro com o passo de 2 ms do otimizador: F2K de 0,29% para 0,005%; whipper de 0,069% para 0,002%; King Arthur de 0,025% para 0,003%. O F2K voltou à tolerância estrita de 0,1% no teste.
+  - O culpado foi achado comparando as trajetórias de 2 ms e 0,1 ms: elas só se separavam no pouso das rodas. As duas hipóteses anteriores (defasagem do atrito, suavização do sinal do atrito) estavam erradas; subdividir o passo não mudava nada e foi descartado.
+  - A direção do atrito no pino e o lado carregado de um trilho de dois lados agora são recalculados dentro do passo quando mudam.
+- **Barra 3D no celular:** abaixo de 800 px os controles 3D viram três grupos recolhíveis (Condições, Ações, Construir), com `aria-expanded`. No computador continua tudo em linha.
+- **Teclado na vista 3D:**
+  - Câmera: setas deslocam, Shift+setas giram, + e − aproximam, 0 recentraliza.
+  - Nós (em Editar nós): N e Shift+N escolhem o nó; setas e PageUp/PageDown o movem (5 cm, Shift: 1 cm); Enter confirma; Esc solta.
+  - Cada movimento anuncia o nó e as coordenadas.
+
 ## 2026-10-17: seis melhorias (dispersão, flexão, Aprenda 3D, exportação, atrito implícito, construção em 3D)
 
 1. **Dispersão (3D).** O botão "Dispersão" dispara 40 vezes com pequenas variações (soltura ±1°, rajadas de 1,5 m/s, pino ±1 cm, semente fixa) em vários workers e mostra os pontos de queda com as elipses de 1σ e 2σ.
