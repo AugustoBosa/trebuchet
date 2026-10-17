@@ -71,6 +71,7 @@ export function createEditor(o: {
   // --- drawing ---
   function draw() {
     const { g, w, h } = fitCanvas(o.canvas);
+    if (!w) return; // hidden (3D view on): a zero-width view would make the grid loop forever
     v = view(w, h, bounds);
     const { line, disk } = painter(g, v);
     const ink = css('--ink');

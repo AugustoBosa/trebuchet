@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { css, cssHeight } from './charts';
 import { camRope } from './physics/constraints';
 import { twist } from './physics3d/constraints3';
@@ -10,6 +11,10 @@ import type { Bounds } from './render';
 const X = new THREE.Vector3(1, 0, 0);
 const Y = new THREE.Vector3(0, 1, 0);
 const world = (q: Float64Array, b: BodyRef, local: V3): V3 => (b === 'ground' ? local : add([q[7 * b], q[7 * b + 1], q[7 * b + 2]], rotate(q, 7 * b + 3, local)));
+// a draggable point of the design; axes = which world axes the gizmo offers ('xy', 'z', 'xyz')
+export interface Handle3 { p: V3; axes: string; label: string }
+export interface HandleEvents { move: (i: number, p: V3) => void; end: () => void; select?: (label: string | undefined) => void }
+
 const flightPos = (r: Result3, t: number) => r.flight[Math.min(r.flight.length - 1, Math.round((t - r.release!.t) / 1e-3))];
 
 // 3D view of a shot from the 3D solver: planar parts get a depth (twin A-frame across the axle, rails), orbit camera.
@@ -28,8 +33,46 @@ export function createView3d(canvas: HTMLCanvasElement) {
   const solid = { ink: new THREE.MeshStandardMaterial({ roughness: 0.8 }), muted: new THREE.MeshStandardMaterial({ roughness: 0.9 }), accent: new THREE.MeshStandardMaterial({ roughness: 0.5 }) };
   const wire = { ink: new THREE.LineBasicMaterial(), muted: new THREE.LineBasicMaterial(), accent: new THREE.LineBasicMaterial() };
   const flightMat = new THREE.LineDashedMaterial({ dashSize: 1, gapSize: 1 });
+  const nodeMat = new THREE.MeshBasicMaterial({ depthTest: false, transparent: true, opacity: 0.85 }); // nodes stay visible inside parts
   let built: { m: Mechanism3; r: Result3; group: THREE.Group; update: (q: Float64Array, t: number) => void } | undefined;
   let span0 = 0;
+
+  // --- node editing: spheres on the design's points, a translate gizmo on the selected one
+  const tc = new TransformControls(camera, canvas);
+  const proxy = new THREE.Object3D();
+  const nodeGroup = new THREE.Group();
+  scene.add(proxy, nodeGroup, tc.getHelper());
+  tc.setTranslationSnap(0.01);
+  let handles: Handle3[] = [];
+  let events: HandleEvents | undefined;
+  let sel = -1;
+  tc.addEventListener('change', render);
+  tc.addEventListener('dragging-changed', (e) => {
+    controls.enabled = !e.value;
+    if (!e.value) events?.end();
+  });
+  tc.addEventListener('objectChange', () => sel >= 0 && events?.move(sel, [proxy.position.x, proxy.position.y, proxy.position.z]));
+  const select = (i: number) => {
+    sel = i;
+    if (i < 0) tc.detach();
+    else {
+      proxy.position.set(...handles[i].p);
+      tc.attach(proxy);
+      tc.showX = handles[i].axes.includes('x');
+      tc.showY = handles[i].axes.includes('y');
+      tc.showZ = handles[i].axes.includes('z');
+    }
+    events?.select?.(handles[i]?.label);
+    render();
+  };
+  const ray = new THREE.Raycaster();
+  canvas.addEventListener('pointerdown', (e) => {
+    if (!handles.length || tc.axis) return; // on the gizmo: TransformControls handles it
+    const rc = canvas.getBoundingClientRect();
+    ray.setFromCamera(new THREE.Vector2(((e.clientX - rc.left) / rc.width) * 2 - 1, -((e.clientY - rc.top) / rc.height) * 2 + 1), camera);
+    const hit = ray.intersectObjects(nodeGroup.children)[0];
+    if (hit) select(nodeGroup.children.indexOf(hit.object));
+  });
 
   // straight line whose ends move every frame
   function seg(mat: THREE.LineBasicMaterial, group: THREE.Group) {
@@ -159,7 +202,9 @@ export function createView3d(canvas: HTMLCanvasElement) {
       flightMat.dashSize = flightMat.gapSize = 0.01 * span;
     }
 
-    // recenter on every build, keeping the user's orbit angle; reset the distance only if the machine changed size a lot
+    // recenter on every build, keeping the user's orbit angle (not while a node is being edited: the view would slide
+    // under the cursor); reset the distance only if the machine changed size a lot
+    if (sel >= 0 && span0) return { m, r, group, update };
     const c = box.getCenter(new THREE.Vector3());
     const off = camera.position.clone().sub(controls.target);
     if (!span0 || span / span0 > 1.5 || span0 / span > 1.5) off.set(-0.3 * span, 0.15 * span, 0.8 * span), (span0 = span);
@@ -183,6 +228,7 @@ export function createView3d(canvas: HTMLCanvasElement) {
       scene.background = new THREE.Color(css('--bg'));
       for (const k of ['ink', 'muted', 'accent'] as const) solid[k].color.set(css(`--${k}`)), wire[k].color.set(css(`--${k}`));
       flightMat.color.set(css('--accent'));
+      nodeMat.color.set(css('--accent'));
       if (built?.m !== m || built.r !== r) {
         if (built) scene.remove(built.group), built.group.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
         built = build(m, r, b);
@@ -191,6 +237,24 @@ export function createView3d(canvas: HTMLCanvasElement) {
       const dtF = r.frames.length > 1 ? r.frames[1].t - r.frames[0].t : 1;
       built.update(r.frames[Math.min(r.frames.length - 1, Math.round(t / dtF))].q, t);
       render();
+    },
+    // show draggable nodes (undefined: none, e.g. while a shot plays). Keeps the selection when the list keeps its length.
+    setHandles(list: Handle3[] | undefined, on?: HandleEvents) {
+      const keep = list && list.length === handles.length ? sel : -1;
+      handles = list ?? [];
+      events = on;
+      nodeGroup.children.forEach((o) => (o as THREE.Mesh).geometry.dispose());
+      nodeGroup.clear();
+      const rad = 0.015 * (span0 || 10);
+      for (const h of handles) {
+        const s = new THREE.Mesh(new THREE.SphereGeometry(rad, 16, 12), nodeMat);
+        s.renderOrder = 1;
+        s.position.set(...h.p);
+        nodeGroup.add(s);
+      }
+      if (keep >= 0 && !tc.dragging) proxy.position.set(...handles[keep].p); // snap the gizmo to where the design really went (clamped values)
+      if (keep !== sel || keep < 0) select(keep);
+      else render();
     },
   };
 }

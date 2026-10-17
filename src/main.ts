@@ -8,7 +8,8 @@ import { build, defaults, defaultsFor, geometry, KINDS, type Kind, type Params }
 import { drawFlight, drawMachine, type Bounds, type View } from './render';
 import type { View3d } from './render3d';
 import { apply3d, lift } from './physics3d/lift';
-import type { Mechanism3 } from './physics3d/model3';
+import { add, rotate, type Mechanism3 } from './physics3d/model3';
+import { compile3, moveNode, nodes3 } from './sketch3';
 import { initialState3, simulate3, type Result3 } from './physics3d/solver3';
 import { compile, emptySketch, toSketch } from './sketch';
 import { deleteDesign, download, importFile, listDesigns, loadCurrent, saveCurrent, saveDesign, type Design } from './storage';
@@ -154,7 +155,8 @@ let current: { m: Mechanism; r: Result; b: Bounds; specs: ChartSpec[]; m3?: Mech
 let lastT = 0;
 
 const is3d = () => !!view3d && !machine3d.hidden;
-const mechanism3 = (m: Mechanism) => apply3d(lift(m), { windZ: +$<HTMLInputElement>('wind').value || 0, pinOffset: (+$<HTMLInputElement>('pin').value || 0) / 100 });
+// free sketches keep their depths (compile3); presets are lifted from their planar build
+const mechanism3 = (m: Mechanism) => apply3d(isFree() ? compile3(editor.get()) : lift(m), { windZ: +$<HTMLInputElement>('wind').value || 0, pinOffset: (+$<HTMLInputElement>('pin').value || 0) / 100 });
 const still3 = (m3: Mechanism3): Result3 => ({
   frames: [{ t: 0, ...initialState3(m3), ke: 0, pe: 0, kes: [], forces: [], speed: 0 }],
   flight: [], range: 0, lateral: 0, efficiency: 0, inputEnergy: 0, peakForce: [], dissipated: 0,
@@ -182,6 +184,7 @@ $('view3d').addEventListener('click', async (e) => {
   else preview();
 });
 for (const id of ['wind', 'pin']) $(id).addEventListener('change', () => (current && machine.dataset.mode === 'play' ? run() : preview()));
+$('edit3d').addEventListener('click', () => preview());
 
 
 function drawAt(t: number) {
@@ -224,14 +227,7 @@ function handles(m: Mechanism): Handle[] {
 // static cocked pose (no simulation): free mode shows the editor, presets show draggable handles
 function preview() {
   cancelAnimationFrame(raf);
-  if (view3d && is3d()) { // 3D: still cocked pose, no handles (editing stays in 2D)
-    const m = mechanismOrError();
-    if (m) {
-      const m3 = mechanism3(m);
-      view3d.draw(m3, still3(m3), 0, bounds());
-    }
-    return;
-  }
+  if (view3d && is3d()) return preview3d(view3d);
   if (isFree()) {
     machine.dataset.mode = 'edit';
     return editor.draw();
@@ -286,8 +282,55 @@ function syncForm() {
   });
 }
 
+// 3D still pose with draggable nodes: preset handles move in their plane (xy) and the sling pin across it (z);
+// free-sketch points move in x, y and z
+function preview3d(v: View3d) {
+  machine.dataset.mode = isFree() ? 'edit' : 'handles';
+  const m = mechanismOrError();
+  let m3: Mechanism3 | undefined;
+  try {
+    m3 = m && mechanism3(m);
+  } catch (e) {
+    $('err').textContent = (e as Error).message;
+  }
+  if (!m || !m3) return v.setHandles(undefined);
+  v.draw(m3, still3(m3), 0, bounds());
+  const status = (label?: string) => ($('node3d').textContent = label ? `Nó: ${label}. Arraste as setas.` : 'Clique num ponto laranja para movê-lo.');
+  if (isFree()) {
+    const sk = editor.get();
+    const nodes = nodes3(sk);
+    return v.setHandles(nodes.map((n) => ({ p: n.p, axes: 'xyz', label: n.label })), {
+      move: (i, p) => (moveNode(sk, nodes[i], p), preview()),
+      end: () => saveCurrent(design()),
+      select: status,
+    });
+  }
+  const hs = handles(m);
+  const sling = m3.joints[m3.sling];
+  const pinWorld = sling.kind === 'rope' && (sling.a === m3.projectile ? sling.b : sling.a) !== 'ground'
+    ? (() => {
+        const [b, p] = sling.a === m3.projectile ? [sling.b as number, sling.pb] : [sling.a, sling.pa];
+        return add(m3.bodies[b].pos, rotate(m3.bodies[b].quat, 0, p));
+      })()
+    : undefined;
+  // the pin sits at the long arm's tip: one node there, xy = arm geometry, z = pin offset across the arm
+  const pinAt = pinWorld ? hs.findIndex((h) => Math.hypot(h.pos[0] - pinWorld[0], h.pos[1] - pinWorld[1]) < 1e-6) : -1;
+  const list = hs.map((h, i) => ({ p: [h.pos[0], h.pos[1], i === pinAt ? pinWorld![2] : 0] as [number, number, number], axes: i === pinAt ? 'xyz' : 'xy', label: i === pinAt ? `${h.label} + pino da funda (z)` : h.label }));
+  if (pinWorld && pinAt < 0) list.push({ p: pinWorld, axes: 'z', label: 'pino da funda (desvio lateral)' });
+  v.setHandles(list, {
+    move: (i, p) => {
+      if (i < hs.length) hs[i].apply([p[0], p[1]]), syncForm();
+      if (i === pinAt || i >= hs.length) $<HTMLInputElement>('pin').value = String(Math.max(-50, Math.min(50, Math.round(p[2] * 100)))); // same limits as the field
+      preview();
+    },
+    end: run,
+    select: status,
+  });
+}
+
 function run() {
   cancelAnimationFrame(raf);
+  view3d?.setHandles(undefined);
   const m = mechanismOrError();
   if (!m || (isFree() && !editor.validate())) {
     $('stats').innerHTML = $('physics').innerHTML = '';

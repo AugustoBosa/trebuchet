@@ -6,16 +6,20 @@ import { initialState } from './physics/solver';
 import { world } from './render';
 
 export type Role = 'projectile' | 'counterweight';
-export type SBody =
+// depth (m, +z, across the machine) of a point, edited in the 3D view; absent = 0, the 2D plane
+export type Depth = Partial<Record<'a' | 'b' | 'c' | 'at' | 'pa' | 'pb', number>>;
+export type SBody = (
   | { kind: 'rod'; name: string; a: Vec; b: Vec; mass: number }
-  | { kind: 'disk'; name: string; c: Vec; r: number; mass: number; role?: Role };
-export type SJoint =
+  | { kind: 'disk'; name: string; c: Vec; r: number; mass: number; role?: Role }
+) & { z?: Depth };
+export type SJoint = (
   | { kind: 'pin' | 'weld'; at: Vec; a: number; b: number | 'ground'; mu?: number; radius?: number }
   | { kind: 'rope'; a: number; pa: Vec; b: number | 'ground'; pb: Vec }
   | { kind: 'slider'; a: number; at: Vec; dir: Vec }
   | { kind: 'pull'; a: number; at: Vec; force: number; stroke: number } // crew rope pulled straight down
   | { kind: 'stop'; a: number; b: number | 'ground'; at: Vec } // a rests against b at `at`: may lift off, never pass through
-  | { kind: 'foot'; a: number; at: Vec }; // spiked foot on the ground at `at`: no slip, may lift off
+  | { kind: 'foot'; a: number; at: Vec } // spiked foot on the ground at `at`: no slip, may lift off
+) & { z?: Depth };
 
 export interface Sketch {
   bodies: SBody[];
@@ -237,14 +241,21 @@ export function sanitizeSketch(raw: unknown): Sketch {
   const num = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
   const vec = (v: unknown): Vec => (Array.isArray(v) ? [num(v[0], 0), num(v[1], 0)] : [0, 0]);
   const pos = (v: unknown, d: number) => Math.max(1e-3, num(v, d));
+  const depth = (v: unknown) => {
+    const z = Object.fromEntries(['a', 'b', 'c', 'at', 'pa', 'pb'].flatMap((k) => {
+      const d = (v as Record<string, unknown> | undefined)?.[k];
+      return typeof d === 'number' && Number.isFinite(d) && d ? [[k, d]] : [];
+    }));
+    return Object.keys(z).length ? { z } : {};
+  };
   const sk = emptySketch();
   if (!r || typeof r !== 'object') return sk;
   for (const b of Array.isArray(r.bodies) ? (r.bodies as SBody[]) : []) {
     const name = String(b?.name ?? 'corpo').slice(0, 40);
-    if (b?.kind === 'rod') sk.bodies.push({ kind: 'rod', name, a: vec(b.a), b: vec(b.b), mass: pos(b.mass, 10) });
+    if (b?.kind === 'rod') sk.bodies.push({ kind: 'rod', name, a: vec(b.a), b: vec(b.b), mass: pos(b.mass, 10), ...depth(b.z) });
     else if (b?.kind === 'disk') {
       const role = b.role === 'projectile' || b.role === 'counterweight' ? b.role : undefined;
-      sk.bodies.push({ kind: 'disk', name, c: vec(b.c), r: pos(b.r, 0.1), mass: pos(b.mass, 10), ...(role ? { role } : {}) });
+      sk.bodies.push({ kind: 'disk', name, c: vec(b.c), r: pos(b.r, 0.1), mass: pos(b.mass, 10), ...(role ? { role } : {}), ...depth(b.z) });
     }
   }
   const n = sk.bodies.length;
@@ -253,6 +264,7 @@ export function sanitizeSketch(raw: unknown): Sketch {
   for (const j of Array.isArray(r.joints) ? (r.joints as SJoint[]) : []) {
     const a = idx(j?.a);
     if (a < 0) continue;
+    const n0 = sk.joints.length;
     if (j.kind === 'pin' || j.kind === 'weld') {
       const b = ref(j.b);
       if (b === -1) continue;
@@ -271,6 +283,7 @@ export function sanitizeSketch(raw: unknown): Sketch {
       const b = ref(j.b);
       if (b !== -1) sk.joints.push({ kind: 'stop', a, b, at: vec(j.at) });
     }
+    if (sk.joints.length > n0) Object.assign(sk.joints[n0], depth(j.z));
   }
   sk.releaseDeg = num(r.releaseDeg, 45);
   sk.airDensity = Math.max(0, num(r.airDensity, 1.225));

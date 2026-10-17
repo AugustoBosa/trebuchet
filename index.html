@@ -205,6 +205,8 @@
         <span id="opts3d" hidden>
           <label title="Vento soprando de lado (positivo = para a esquerda de quem olha o alvo). Empurra o projétil no voo e durante o giro."><span>Vento lateral (m/s)</span><input type="number" id="wind" aria-label="Vento lateral em metros por segundo" value="0" step="1" min="-20" max="20"></label>
           <label title="Pino de soltura montado fora da linha central do braço: a funda puxa a pedra de lado e o tiro desvia."><span>Pino fora do centro (cm)</span><input type="number" id="pin" aria-label="Deslocamento lateral do pino de soltura em centímetros" value="0" step="1" min="-50" max="50"></label>
+          <button type="button" class="ghost" id="edit3d" title="Volta à pose armada com os nós arrastáveis em 3D">Editar nós</button>
+          <span id="node3d" class="muted" aria-live="polite"></span>
         </span></div>
       <canvas id="machine" role="img" aria-label="Desenho da máquina e animação do disparo" height="440"></canvas>
       <canvas id="machine3d" role="img" aria-label="Vista 3D da máquina e do disparo; arraste para girar a câmera" height="440" hidden></canvas>
