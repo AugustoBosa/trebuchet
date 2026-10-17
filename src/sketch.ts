@@ -2,7 +2,7 @@
 // compile() turns it into a Mechanism for the solver; toSketch() goes the other way for presets.
 import { jointRows } from './physics/constraints';
 import type { Body, Joint, Mechanism, Vec } from './physics/model';
-import { initialState } from './physics/solver';
+import { initialState, startsActive } from './physics/solver';
 import { world } from './render';
 
 export type Role = 'projectile' | 'counterweight';
@@ -19,6 +19,11 @@ export type SJoint = (
   | { kind: 'pull'; a: number; at: Vec; force: number; stroke: number } // crew rope pulled straight down
   | { kind: 'stop'; a: number; b: number | 'ground'; at: Vec } // a rests against b at `at`: may lift off, never pass through
   | { kind: 'foot'; a: number; at: Vec } // spiked foot on the ground at `at`: no slip, may lift off
+  | { kind: 'spike'; a: number; at: Vec } // spikes in the air: plant (become a foot) wherever they touch the ground
+  | { kind: 'roller'; a: number; at: Vec } // fixed roller under rod a at `at`: the rod slides over it, may lift off
+  | { kind: 'floor'; a: number; at: Vec; y: number } // the body point at `at` can't go below height y (a track or the ground to land on)
+  | { kind: 'spring'; a: number; at: Vec; anchor: Vec; k: number; rest: number } // spring from the body point to a ground anchor
+  | { kind: 'cam'; a: number; b: number; at: Vec; r0: number; r1: number; span: number; over?: Vec } // drum on body b centered at `at`, its rope holding counterweight a (from a pulley at `over`, if any)
 ) & { z?: Depth };
 
 export interface Sketch {
@@ -46,7 +51,8 @@ export function segDist(p: Vec, a: Vec, b: Vec) {
 // [world point, body] pairs a joint connects
 export function attachments(j: SJoint): [Vec, number | 'ground'][] {
   if (j.kind === 'rope') return [[j.pa, j.a], [j.pb, j.b]];
-  if (j.kind === 'slider' || j.kind === 'pull' || j.kind === 'foot') return [[j.at, j.a]];
+  if (j.kind === 'cam') return [[j.at, j.b]];
+  if (j.kind !== 'pin' && j.kind !== 'weld' && j.kind !== 'stop') return [[j.at, j.a]];
   return [[j.at, j.a], [j.at, j.b]];
 }
 
@@ -87,7 +93,8 @@ export function compile(sk: Sketch): Mechanism {
   const loc = (i: number | 'ground', w: Vec): Vec => (i === 'ground' ? w : toLocal(sk.bodies[i], w));
   const pulls = sk.joints.flatMap((j) =>
     j.kind === 'pull' ? [{ body: j.a, local: loc(j.a, j.at), force: j.force, untilY: Math.max(0, j.at[1] - j.stroke) }] : []);
-  const joints: Joint[] = sk.joints.filter((j): j is Exclude<SJoint, { kind: 'pull' }> => j.kind !== 'pull').map((j): Joint => {
+  const springs = sk.joints.flatMap((j) => (j.kind === 'spring' ? [{ body: j.a, local: loc(j.a, j.at), anchor: j.anchor, k: j.k, rest: j.rest }] : []));
+  const joints: Joint[] = sk.joints.filter((j): j is Exclude<SJoint, { kind: 'pull' | 'spring' }> => j.kind !== 'pull' && j.kind !== 'spring').map((j): Joint => {
     switch (j.kind) {
       case 'pin':
         return { kind: 'pin', a: j.a, pa: loc(j.a, j.at), b: j.b, pb: loc(j.b, j.at), ...(j.mu ? { friction: { mu: j.mu, radius: j.radius ?? 0.05 } } : {}) };
@@ -101,6 +108,19 @@ export function compile(sk: Sketch): Mechanism {
         return { kind: 'stop', a: j.a, b: j.b, angle: bodies[j.a].angle - (j.b === 'ground' ? 0 : bodies[j.b].angle) };
       case 'foot':
         return { kind: 'foot', a: j.a, pa: loc(j.a, j.at), at: j.at };
+      case 'spike':
+        return { kind: 'spike', a: j.a, pa: loc(j.a, j.at) };
+      case 'roller': // the rod lies on top of the roller: the face whose normal points up
+        return { kind: 'roller', a: j.a, at: j.at, side: Math.cos(bodies[j.a].angle) <= 0 ? -1 : 1 };
+      case 'floor':
+        return { kind: 'floor', a: j.a, pa: loc(j.a, j.at), y: j.y };
+      case 'cam': {
+        // rope exactly taut in the drawn pose (it hangs from the pulley, or from the drum itself)
+        const top = j.over ? j.over[1] + dist(j.at, j.over) : j.at[1];
+        const cw = sk.bodies[j.a];
+        const y = cw.kind === 'disk' ? cw.c[1] : (cw.a[1] + cw.b[1]) / 2;
+        return { kind: 'cam', a: j.a, b: j.b, hub: loc(j.b, j.at), theta0: bodies[j.b].angle, r0: j.r0, r1: j.r1, span: j.span, length: top - y, ...(j.over ? { over: j.over } : {}) };
+      }
     }
   });
   const sling = joints.findIndex((j) => j.kind === 'rope' && (j.a === projectile || j.b === projectile));
@@ -118,6 +138,7 @@ export function compile(sk: Sketch): Mechanism {
     axle: axle < 0 ? sling : axle,
     ...(cw >= 0 ? { counterweight: cw } : {}),
     ...(pulls.length ? { pulls } : {}),
+    ...(springs.length ? { springs } : {}),
     releaseAngle: (sk.releaseDeg * Math.PI) / 180,
     air: { density: sk.airDensity, cd: sk.dragCd },
   };
@@ -127,7 +148,8 @@ export function compile(sk: Sketch): Mechanism {
 // Free spins of disks held only at their center (e.g. the projectile) are not counted: they move nothing.
 export function analyze(m: Mechanism) {
   const s = initialState(m);
-  const rows = m.joints.flatMap((j) => jointRows(s, j, m.bodies.length).map((r) => Array.from(r.J)));
+  const on = startsActive(m, s); // a contact that starts open doesn't lock anything
+  const rows = m.joints.flatMap((j, i) => (on[i] ? jointRows(s, j, m.bodies.length).map((r) => Array.from(r.J)) : []));
   const A = rows.map((r) => r.slice());
   let rank = 0;
   const cols = 3 * m.bodies.length;
@@ -157,7 +179,7 @@ export function analyze(m: Mechanism) {
   return { dof: cols - rank - freeSpins, redundant: rows.length - rank };
 }
 
-// Preset → sketch (crew pull has no sketch tool yet, so it is dropped).
+// Preset → sketch.
 export function toSketch(m: Mechanism, extra: { troughMu: number }): Sketch {
   const q = initialState(m).q;
   const bodies: SBody[] = m.bodies.map((b, i) => {
@@ -203,14 +225,17 @@ export function toSketch(m: Mechanism, extra: { troughMu: number }): Sketch {
       }
       case 'foot':
         return [{ kind: 'foot', a: j.a, at: [j.at[0], j.at[1]] }];
-      case 'floor':
-        return []; // regenerated by compile()
-      case 'cam':
-      case 'roller':
+      case 'floor': // the projectile's trough is regenerated by compile(); other bodies keep their landing surface
+        return j.a === m.projectile ? [] : [{ kind: 'floor', a: j.a, at: w(j.a, j.pa), y: j.y }];
       case 'spike':
-        return []; // no drum/roller/spike tool in the editor: main.ts refuses the handoff before getting here
+        return [{ kind: 'spike', a: j.a, at: w(j.a, j.pa) }];
+      case 'roller':
+        return [{ kind: 'roller', a: j.a, at: [j.at[0], j.at[1]] }];
+      case 'cam':
+        return [{ kind: 'cam', a: j.a, b: j.b, at: w(j.b, j.hub), r0: j.r0, r1: j.r1, span: j.span, ...(j.over ? { over: [j.over[0], j.over[1]] as Vec } : {}) }];
     }
   });
+  for (const sp of m.springs ?? []) joints.push({ kind: 'spring', a: sp.body, at: w(sp.body, sp.local), anchor: [sp.anchor[0], sp.anchor[1]], k: sp.k, rest: sp.rest });
   joints.push(...hangers);
   for (const pl of m.pulls ?? []) {
     const at = w(pl.body, pl.local);
@@ -223,7 +248,7 @@ export function toSketch(m: Mechanism, extra: { troughMu: number }): Sketch {
 export function allPoints(sk: Sketch): Vec[] {
   return [
     ...sk.bodies.flatMap((b) => (b.kind === 'rod' ? [b.a, b.b] : [b.c])),
-    ...sk.joints.flatMap((j) => (j.kind === 'rope' ? [j.pa, j.pb] : [j.at])),
+    ...sk.joints.flatMap((j) => (j.kind === 'rope' ? [j.pa, j.pb] : j.kind === 'spring' ? [j.at, j.anchor] : j.kind === 'cam' && j.over ? [j.at, j.over] : [j.at])),
   ];
 }
 
@@ -282,6 +307,17 @@ export function sanitizeSketch(raw: unknown): Sketch {
     } else if (j.kind === 'stop') {
       const b = ref(j.b);
       if (b !== -1) sk.joints.push({ kind: 'stop', a, b, at: vec(j.at) });
+    } else if (j.kind === 'spike' || j.kind === 'roller') {
+      sk.joints.push({ kind: j.kind, a, at: vec(j.at) });
+    } else if (j.kind === 'floor') {
+      sk.joints.push({ kind: 'floor', a, at: vec(j.at), y: num(j.y, 0) });
+    } else if (j.kind === 'spring') {
+      sk.joints.push({ kind: 'spring', a, at: vec(j.at), anchor: vec(j.anchor), k: pos(j.k, 7000), rest: pos(j.rest, 1) });
+    } else if (j.kind === 'cam') {
+      const b = idx(j.b);
+      const at = vec(j.at);
+      const over = Array.isArray(j.over) ? vec(j.over) : undefined;
+      if (b !== -1 && b !== a) sk.joints.push({ kind: 'cam', a, b, at, r0: pos(j.r0, 0.8), r1: pos(j.r1, 0.2), span: pos(j.span, 1), ...(over && over[1] > at[1] ? { over } : {}) });
     }
     if (sk.joints.length > n0) Object.assign(sk.joints[n0], depth(j.z));
   }

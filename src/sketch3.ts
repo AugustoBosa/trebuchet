@@ -56,7 +56,7 @@ export function compile3(sk: Sketch): Mechanism3 {
   const s0 = initialState3(m3);
   const local = (i: BodyRef, w: V3): V3 => (i === 'ground' ? w : rotateInv(m3.bodies[i].quat, 0, sub(w, m3.bodies[i].pos)));
   const axisIn = (i: BodyRef): V3 => (i === 'ground' ? Z : rotateInv(m3.bodies[i].quat, 0, Z));
-  const sj = sk.joints.filter((j) => j.kind !== 'pull');
+  const sj = sk.joints.filter((j) => j.kind !== 'pull' && j.kind !== 'spring'); // same order as compile()'s joints
   m3.joints = m3.joints.map((j, k) => {
     const s = sj[k];
     if (!s) return j; // the trough floor compile() appends
@@ -77,12 +77,21 @@ export function compile3(sk: Sketch): Mechanism3 {
         return { ...j, axisB: axisIn(j.b), angle: twist(s0, j.a, j.b, axisIn(j.b)) };
       case 'foot':
         return { ...j, pa: local(j.a, P!), at: P! };
+      case 'spike':
+      case 'floor':
+        return { ...j, pa: local(j.a, P!) };
+      case 'roller':
+        return { ...j, at: P! };
+      case 'cam': // drum keeps turning about z; its pulley moves sideways with it
+        return { ...j, hub: local(j.b, P!), ...(j.over ? { over: [j.over[0], j.over[1], P![2]] as V3 } : {}) };
       default:
         return j;
     }
   });
   const pulls = sk.joints.filter((j) => j.kind === 'pull');
   m3.pulls = m3.pulls?.map((pl, k) => ({ ...pl, local: local(pl.body, at3(pulls[k].at, zOf(pulls[k], 'at'))) }));
+  const springs = sk.joints.filter((j) => j.kind === 'spring');
+  m3.springs = m3.springs?.map((sp, k) => ({ ...sp, local: local(sp.body, at3(springs[k].at, zOf(springs[k], 'at'))) })); // anchor stays at z = 0
   return m3;
 }
 
@@ -92,7 +101,10 @@ export interface Node3 { p: V3; refs: Ref[]; label: string }
 
 const pointKeys = (o: SBody | SJoint): (keyof Depth)[] =>
   o.kind === 'rod' ? ['a', 'b'] : o.kind === 'disk' ? ['c'] : o.kind === 'rope' ? ['pa', 'pb'] : ['at'];
-const JOINT_NAMES: Record<SJoint['kind'], string> = { pin: 'pino', weld: 'solda', rope: 'corda', slider: 'trilho', pull: 'puxada', stop: 'batente', foot: 'pé' };
+const JOINT_NAMES: Record<SJoint['kind'], string> = {
+  pin: 'pino', weld: 'solda', rope: 'corda', slider: 'trilho', pull: 'puxada', stop: 'batente', foot: 'pé',
+  spike: 'espetos', roller: 'rolete', floor: 'piso', spring: 'mola', cam: 'tambor',
+};
 const pointOf = (r: Ref): V3 => at3((r.o as unknown as Record<string, Vec>)[r.k], zOf(r.o, r.k));
 
 export function nodes3(sk: Sketch): Node3[] {

@@ -13,7 +13,7 @@ describe('walking arm (pose real: em pé na ponta do braço, perna no ar)', () =
 
   it('tomba, os espinhos cravam à frente do dedo e depois não escorregam', () => {
     expect(r.error).toBeUndefined();
-    expect(spike(r.frames[0].q)[1]).toBeGreaterThan(0.05); // armed: spikes in the air
+    expect(spike(r.frames[0].q)[1]).toBeGreaterThan(0.02); // armed: spikes in the air (build() refuses < 2 cm)
     expect(bite).toBeGreaterThan(0);
     const at = spike(r.frames[bite].q);
     expect(at[0]).toBeGreaterThan(0.2); // landed ahead of the finger (at x ≈ 0)
@@ -39,5 +39,12 @@ describe('walking arm (pose real: em pé na ponta do braço, perna no ar)', () =
       const pts: [number, number][] = b.shape.kind === 'rod' ? [[-b.shape.length / 2, 0], [b.shape.length / 2, 0]] : [[0, -b.shape.radius]];
       for (const f of full.frames) for (const p of pts) expect(world(f.q, i, p)[1], `${b.name} em t=${f.t}`).toBeGreaterThan(-0.03);
     });
+  });
+
+  it('contrapeso de ferro: ~69 m no ajuste padrão (pedra no mesmo lugar raspava o chão), abaixo do teto sem ar', () => {
+    expect(r.range).toBeGreaterThan(66);
+    expect(r.efficiency).toBeLessThan(1);
+    const noAir = simulate(build('walking', { ...defaultsFor('walking'), airDensity: 0 }), { afterRelease: 0 });
+    expect(r.range).toBeLessThan(noAir.range);
   });
 });

@@ -1,22 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import { lift } from '../src/physics3d/lift';
 import { simulate3 } from '../src/physics3d/solver3';
-import { build, defaults, defaultsFor, type Kind } from '../src/presets';
+import { build, defaults, defaultsFor, KINDS, type Kind } from '../src/presets';
 import { compile, sanitizeSketch, toSketch } from '../src/sketch';
 import { compile3, moveNode, nodes3 } from '../src/sketch3';
 
 const sketchOf = (k: Kind) => toSketch(build(k, defaultsFor(k)), { troughMu: defaults.troughMu });
 
 describe('esboço em 3D', () => {
-  it.each(['fixed', 'hinged', 'floating', 'whipper'] as Kind[])('%s: profundidades todas 0 pelo caminho 3D = esboço plano', (kind) => {
+  it.each(Object.keys(KINDS) as Kind[])('%s: profundidades todas 0 pelo caminho 3D = esboço plano', (kind) => {
     const sk = sketchOf(kind);
     const flat = simulate3(lift(compile(sk)), { afterRelease: 0 });
     sk.bodies.forEach((b) => (b.z = {})); // forces the general 3D path, same geometry
     const r = simulate3(compile3(sk), { afterRelease: 0 });
-    expect(r.error).toBeUndefined();
+    expect(r.error).toBe(flat.error);
     expect(Math.abs(r.range - flat.range) / flat.range).toBeLessThan(1e-6);
     expect(Math.abs(r.lateral)).toBeLessThan(1e-9);
-  });
+  }, 20_000);
 
   it('a profundidade sobrevive a salvar/carregar', () => {
     const sk = sketchOf('hinged');

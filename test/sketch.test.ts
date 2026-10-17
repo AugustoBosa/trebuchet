@@ -1,11 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { simulate } from '../src/physics/solver';
-import { build, defaults, defaultsFor, type Kind } from '../src/presets';
+import { build, defaults, defaultsFor, KINDS, type Kind } from '../src/presets';
 import { analyze, compile, detachedJoints, emptySketch, removeBody, sanitizeSketch, toSketch } from '../src/sketch';
 
 describe('editor livre (sketch)', () => {
-  // walking, murlin, wheel and f2k use joints the editor has no tools for (landing spikes, drum, roller)
-  it.each(['fixed', 'hinged', 'floating', 'traction', 'whipper'] as Kind[])('%s: preset → esboço → motor dá o mesmo disparo', (kind) => {
+  it.each(Object.keys(KINDS) as Kind[])('%s: preset → esboço → motor dá o mesmo disparo', (kind) => {
     const m = build(kind, defaultsFor(kind));
     const a = simulate(m, { afterRelease: 0 });
     const b = simulate(compile(toSketch(m, { troughMu: defaults.troughMu })), { afterRelease: 0 });
@@ -80,4 +79,39 @@ describe('editor livre (sketch)', () => {
     expect(sanitizeSketch({ bodies: [{ kind: 'rod', a: [0, 0], b: [1, 1], mass: 1 }], joints: [{ kind: 'pull', a: 0, at: [1, 1], force: -5, stroke: 'x' }] }).joints[0])
       .toMatchObject({ kind: 'pull', force: expect.any(Number), stroke: expect.any(Number) });
   });
+
+  it.each(['murlin', 'f2k', 'walking', 'spring'] as Kind[])('%s: tambor, rolete, chão, espetos e mola sobrevivem à exportação/importação', (kind) => {
+    const sk = toSketch(build(kind, defaultsFor(kind)), { troughMu: defaults.troughMu });
+    const back = sanitizeSketch(JSON.parse(JSON.stringify(sk)));
+    expect(back.joints.map((j) => j.kind)).toEqual(sk.joints.map((j) => j.kind));
+    const a = simulate(compile(sk), { afterRelease: 0 });
+    const b = simulate(compile(back), { afterRelease: 0 });
+    expect(b.error).toBeUndefined();
+    expect(b.range).toBeCloseTo(a.range, 6);
+  });
+
+  it('mola cuja ponta saiu do corpo é detectada como conexão solta', () => {
+    const sk = toSketch(build('spring', defaultsFor('spring')), { troughMu: 0 });
+    const i = sk.joints.findIndex((j) => j.kind === 'spring');
+    const sp = sk.joints[i];
+    if (sp.kind !== 'spring') throw new Error('sem mola');
+    sp.at = [sp.at[0] + 1, sp.at[1] + 1];
+    expect(detachedJoints(sk)).toContain(i);
+  });
+
+  it.each(['f2k', 'walking', 'murlin'] as Kind[])('%s: contato que começa aberto (rodas no ar, contrapeso acima do chão) não trava o esboço', (kind) => {
+    const { dof } = analyze(compile(toSketch(build(kind, defaultsFor(kind)), { troughMu: 0 })));
+    expect(dof).toBeGreaterThan(0);
+  });
+
+  it('polia no mesmo ponto do tambor (JSON adulterado) é descartada em vez de gerar NaN', () => {
+    const sk = toSketch(build('murlin', defaultsFor('murlin')), { troughMu: 0 });
+    const cam = sk.joints.find((j) => j.kind === 'cam')!;
+    if (cam.kind !== 'cam') throw new Error('sem tambor');
+    const back = sanitizeSketch(JSON.parse(JSON.stringify({ ...sk, joints: sk.joints.map((j) => (j === cam ? { ...cam, over: cam.at } : j)) })));
+    const c2 = back.joints.find((j) => j.kind === 'cam')!;
+    expect(c2.kind === 'cam' && c2.over).toBeFalsy();
+    expect(simulate(compile(back), { afterRelease: 0 }).frames.at(-1)!.q.every(Number.isFinite)).toBe(true);
+  });
 });
+

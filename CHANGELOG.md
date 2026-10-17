@@ -5,16 +5,16 @@ Simulador de trebuchets (Vite + TypeScript). Rodar: `npm run dev` · testes: `np
 ## Em aberto
 
 ### Física / realismo
-1. **Walking arm: 54 m contra 81 m do recorde (Stapleton, 2018).** Falta o projétil partir de uma plataforma no braço. ~2–3 h.
-2. **Densidade do contrapeso por tipo** (ferro × pedra), que muda o tamanho do CW e a folga com o chão. ~1 h.
-3. **Simplificações marcadas com `ponytail:` no código.** Rever só se algum resultado parecer fisicamente errado:
+1. **Walking arm: 69 m contra 81 m do recorde (Stapleton, 2018).** A bola ainda parte do chão. Testei um apoio no braço (contato unilateral `ledge`), mas a geometria real do suporte não é pública e o modelo não fechou de forma confiável (a bola caía do apoio ou nunca saía dele). Retomar se aparecer a geometria do suporte (fotos ou medidas).
+2. **Simplificações marcadas com `ponytail:` no código.** Rever só se algum resultado parecer fisicamente errado:
    - sem atrito estático (`solver.ts`, normal defasada);
    - sem restituição: nada quica;
    - roletes sem atrito de rolamento (`presets.ts`).
-4. **Tipos não feitos: VLR, Fiffer, Merlin, BAKA.** Não há geometria utilizável nas fontes públicas.
+3. **Tipos não feitos: VLR, Fiffer, Merlin, BAKA.** Não há geometria utilizável nas fontes públicas.
 
 ### Editor / UI
-1. **O editor livre não tem ferramentas para tambor, rolete, mola e espetos de pouso.** Hoje recusa os tipos cam/roller. ~0,5–1 dia.
+1. **Tambor desenhado no editor só desenrola com o braço girando no sentido horário**, que é o dos presets. Uma máquina espelhada enrola a corda sem aviso.
+2. **Pontos encaixam na grade de 5 cm.** Uma ponta de mola ou corda presa a uma barra diagonal pode cair fora dela; aparece o anel vermelho de "conexão solta". Isso já acontecia antes com a corda.
 
 ### 3D (branch `feat/3d`)
 1. **Merge com `main`.** A outra sessão mexe em `main.ts`, `editor.ts`, `sketch.ts` e `solver.ts`. Se ela trouxer uma junta nova (ex.: `ledge`), ela precisa de uma versão em `src/physics3d/constraints3.ts` e em `lift.ts`, e de um caso no teste de paridade.
@@ -52,6 +52,26 @@ Simulador de trebuchets (Vite + TypeScript). Rodar: `npm run dev` · testes: `np
 - **Bug corrigido:** o editor 2D entrava em laço infinito ao desenhar a grade num canvas escondido (largura 0); acontecia ao abrir o editor livre na vista 3D.
 
 ## 2026-10-16
+
+### Itens maiores (terceira leva)
+- **Densidade do contrapeso (`cwDensity`, kg/m³)** em todos os tipos com contrapeso, de 1000 a 11300 (pedra 2500, ferro 7800, chumbo 11300).
+  - Mesma massa e mesma energia; mais denso = contrapeso menor.
+  - Exemplo: articulado com haste de 1,6 m. Com pedra, o contrapeso bate no chão; com ferro, dá 233 m (o padrão é 225 m).
+  - Os presets continuam em 2500, exceto o walking.
+  - Designs importados agora têm os valores limitados às faixas dos controles (densidade 0 daria contrapeso infinito).
+- **Walking arm: 54 m → 69 m.** 17,5 lb de pesos metálicos = ferro. Com o contrapeso menor, ele tem mais folga do chão.
+  - Ajuste robusto procurado no passo de 0,5 ms: perna a 27°, funda de 0,67 m, soltura a 37°.
+  - Dá 68,7 m, e no pior caso (±2°/±3 cm/±3°) 64,6 m.
+  - Com pedra, a mesma busca dá ~58 m.
+- **Editor livre com 5 ferramentas novas: Espetos, Rolete, Chão (pouso/trilho), Mola e Tambor (com polia opcional).**
+  - Os 13 tipos abrem no editor e dão o mesmo disparo (teste de ida e volta para todos).
+  - A análise de graus de liberdade ignora contatos que começam abertos (`startsActive`, compartilhado com o solver). Antes, F2K e walking apareciam como "travados".
+- O vitest só procura testes em `test/`, para não rodar as cópias em `.claude/worktrees`.
+
+| Tipo | Alcance | η |
+|---|---|---|
+| walking | 54 → 69 m | 50 → ~71% |
+| demais | inalterados (tabela abaixo; teste de regressão em `test/density.test.ts`) | |
 
 ### Correções rápidas (segunda leva)
 - **Celular:** o canvas da máquina passou de 440 para 300 px (`data-h` definido em `main.ts` para ≤ 800 px). Os controles começam ~140 px mais acima.

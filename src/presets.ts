@@ -70,16 +70,16 @@ export const KINDS: Record<Kind, { label: string; info: string; fields: (keyof P
   },
   walking: {
     label: 'Walking arm',
-    info: 'Design de 2015 (J. Stapleton): sem estrutura, só o braço e uma perna triangular com espinhos. Armado, fica em pé sobre a ponta do braço longo, contrapeso no topo, com a perna pendurada à frente, presa num ângulo por uma corda de ajuste e com os espinhos no ar. Solto, tomba inteiro para a frente; os espinhos cravam onde tocam o chão, a corda afrouxa e o braço chicoteia por cima da perna plantada: a máquina "anda". Medidas das instruções do próprio autor (máquina do recorde leve de 2018: bola de 85 g a 81 m); ângulo da perna, funda e soltura ajustados pelo otimizador. O modelo dá ~54 m neste ajuste com folga e até ~68 m no limite (contrapeso raspando o chão na soltura, que é como o autor recomenda ajustar). A diferença restante pode vir do projétil, que no real parte de uma plataforma sobre o braço (aqui parte do chão), da plataforma de lançamento (+5 cm de queda) e do arrasto real da bola.',
+    info: 'Design moderno (J. Stapleton): sem estrutura, só o braço e uma perna triangular com espinhos. Armado, fica em pé sobre a ponta do braço longo, contrapeso no topo, com a perna pendurada à frente, presa num ângulo por uma corda de ajuste e com os espinhos no ar. Solto, tomba inteiro para a frente; os espinhos cravam onde tocam o chão, a corda afrouxa e o braço chicoteia por cima da perna plantada: a máquina "anda". Medidas das instruções do próprio autor (máquina do recorde leve de 2018: bola de 85 g a 81 m); ângulo da perna, funda e soltura ajustados pelo otimizador. Contrapeso de ferro (17,5 lb de pesos metálicos, menor que um de pedra e com mais folga do chão). O modelo dá ~69 m neste ajuste, e ainda ~65 m com ±2° na perna, ±3 cm na funda e ±3° na soltura. A diferença para o recorde pode vir da bola, que no real parte de um apoio no braço (aqui parte do chão: a geometria desse apoio não é pública), da plataforma de lançamento (+5 cm de queda) e do arrasto real da bola.',
     fields: ['longArm', 'shortArm', 'armMass', 'legLength', 'legMass', 'cwMass', 'cwDensity', 'cockDeg', ...SHOT],
     // Stapleton's Instructables (the 2018 lightweight record machine), inches → m: finger 20", counterweight
     // 17.5 lb centered ~17.5" behind the axle, leg 20.5", 1/4" axle bolt, racquetball topped up with water to 3 oz
     preset: {
-      longArm: 0.508, shortArm: 0.445, armMass: 0.6, legLength: 0.52, legMass: 0.6, cwMass: 7.94,
-      // leg angle, sling, release: best point that still works ±2°/±3 cm/±3° around it (~54 m). The optimizer,
-      // free inside the 41" rule, picks leg ≈ 0.53 m and counterweight ≈ 0.44 m by itself (Stapleton's own numbers)
-      // and reaches ~68 m, but only with the counterweight grazing the ground at release
-      projMass: 0.085, projRadius: 0.0286, slingLength: 0.53, releaseDeg: 44, cockDeg: 30, axleRadius: 0.0032,
+      // 17.5 lb of metal weights, not stone: iron's smaller counterweight (r ≈ 6 cm vs 9 cm) clears the ground
+      longArm: 0.508, shortArm: 0.445, armMass: 0.6, legLength: 0.52, legMass: 0.6, cwMass: 7.94, cwDensity: 7800,
+      // leg angle, sling, release: best point that still works ±2°/±3 cm/±3° around it, searched at the UI's 0.5 ms
+      // step (≈69 m, ≥64.6 m in that box; with a stone counterweight the same search gives ≈58 m)
+      projMass: 0.085, projRadius: 0.0286, slingLength: 0.67, releaseDeg: 37, cockDeg: 27, axleRadius: 0.0032,
     },
   },
   murlin: {
