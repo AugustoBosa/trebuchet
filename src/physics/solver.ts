@@ -1,5 +1,6 @@
 import { jointRows, point, type Row, type State } from './constraints';
 import { fly } from './ballistics';
+import { anchor, bendingPeak } from './bending';
 import { G, type Mechanism, type Vec } from './model';
 
 const GROUND_TOL = 0.02; // m of penetration tolerated before a part counts as hitting the ground
@@ -315,6 +316,7 @@ export interface Result {
   efficiency: number; // projectile energy at release / energy put in (counterweight drop + crew work + springs)
   inputEnergy: number; // J, counterweight drop + crew work + spring energy released, until release
   peakForce: number[]; // per joint, N (until release)
+  peakBending?: { moment: number; fromAxle: number; long: boolean; t: number }; // the arm's worst section until release: N·m, m from the axle, on the long (sling) side?
   dissipated: number; // J lost to friction + air + impacts until release
   error?: string;
 }
@@ -340,6 +342,7 @@ export function simulate(
   const y0cw = cw === undefined ? 0 : s.q[3 * cw + 1];
   const y0pulls = (m.pulls ?? []).map((pl) => point(s, pl.body, pl.local).p[1]);
   const res: Result = { frames, flight: [], range: 0, efficiency: 0, inputEnergy: 0, peakForce, dissipated: 0 };
+  const arm = (m.joints[m.axle] as { a?: number } | undefined)?.a; // the axle's body is the throwing arm
 
   for (let step = 0, t = 0; t < tMax; step++, t = step * dt) {
     if (res.release && t > res.release.t + afterRelease) break;
@@ -349,6 +352,11 @@ export function simulate(
     if (step % frameEvery === 0) {
       const forces = lambda.map((l) => Math.hypot(...l));
       frames.push({ t, q: s.q.slice(), ...energy(m, s), forces, speed: Math.hypot(s.v[P], s.v[P + 1]) });
+      const bend = !res.release && arm !== undefined ? bendingPeak(m, s, active, a1, lambda, arm) : undefined;
+      if (bend && bend.moment > (res.peakBending?.moment ?? 0)) {
+        const ax = anchor(m, s, m.joints[m.axle], arm!)?.[0] ?? 0, sl = anchor(m, s, m.joints[m.sling], arm!)?.[0] ?? ax + 1;
+        res.peakBending = { moment: bend.moment, fromAxle: Math.abs(bend.x - ax), long: (bend.x - ax) * (sl - ax) > 0, t };
+      }
     }
     let liftOff = false;
     m.joints.forEach((j, ji) => {

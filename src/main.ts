@@ -98,6 +98,7 @@ function stats(r: Result, m: Mechanism, lateral?: number) {
     ['Ângulo / altura de saída', r.release ? `${((r.release.angle * 180) / Math.PI).toFixed(0)}° / ${r.release.p[1].toFixed(1)} m` : '—'],
     ['Pico de força no eixo', `${(r.peakForce[m.axle] / 1000).toFixed(1)} kN`],
     ['Pico de tração na funda', `${(r.peakForce[m.sling] / 1000).toFixed(2)} kN`],
+    ...(r.peakBending ? [['Pico de flexão no braço', `${r.peakBending.moment < 1000 ? `${r.peakBending.moment.toFixed(1)} N·m` : `${(r.peakBending.moment / 1000).toFixed(1)} kN·m`}<small>${r.peakBending.fromAxle < 0.02 ? 'no eixo' : `a ${r.peakBending.fromAxle.toFixed(2)} m do eixo, braço ${r.peakBending.long ? 'longo' : 'curto'}`}</small>`] as [string, string]] : []),
     ['Perdas (atrito, ar, impactos)', joules(r.dissipated)],
   ];
   $('stats').innerHTML = items.map(([k, v]) => `<div class="stat"><span>${k}</span><b>${v}</b></div>`).join('');

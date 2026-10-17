@@ -1,6 +1,7 @@
 import { G } from '../physics/model';
 import { bounceRow, reboundOpen, solve } from '../physics/solver';
 import { fly3 } from './ballistics3';
+import { anchor3, bendingPeak3 } from './bending3';
 import { jointRows3, omega, point3, worldAxis, type Row3, type State3 } from './constraints3';
 import { cross, dot, rotate, rotateInv, type Joint3, type Mechanism3, type V3 } from './model3';
 
@@ -263,6 +264,7 @@ export interface Result3 {
   efficiency: number;
   inputEnergy: number;
   peakForce: number[];
+  peakBending?: { moment: number; fromAxle: number; long: boolean; t: number }; // see Result in physics/solver.ts
   dissipated: number;
   error?: string;
 }
@@ -286,6 +288,7 @@ export function simulate3(m: Mechanism3, opts: { dt?: number; tMax?: number; fra
   const y0cw = cw === undefined ? 0 : s.q[7 * cw + 1];
   const y0pulls = (m.pulls ?? []).map((pl) => point3(s, pl.body, pl.local).p[1]);
   const res: Result3 = { frames, flight: [], range: 0, lateral: 0, efficiency: 0, inputEnergy: 0, peakForce, dissipated: 0 };
+  const arm = (m.joints[m.axle] as { a?: number } | undefined)?.a; // the axle's body is the throwing arm
 
   for (let step = 0, t = 0; t < tMax; step++, t = step * dt) {
     if (res.release && t > res.release.t + afterRelease) break;
@@ -293,6 +296,11 @@ export function simulate3(m: Mechanism3, opts: { dt?: number; tMax?: number; fra
     if (step % frameEvery === 0) {
       const forces = lambda.map((l, ji) => load(m.joints[ji], l));
       frames.push({ t, q: s.q.slice(), v: s.v.slice(), ...energy3(m, s), forces, speed: Math.hypot(s.v[6 * P], s.v[6 * P + 1], s.v[6 * P + 2]) });
+      const bend = !res.release && arm !== undefined ? bendingPeak3(m, s, active, a1, lambda, arm) : undefined;
+      if (bend && bend.moment > (res.peakBending?.moment ?? 0)) {
+        const ax = anchor3(s, m.joints[m.axle], arm!)?.[0] ?? 0, sl = anchor3(s, m.joints[m.sling], arm!)?.[0] ?? ax + 1;
+        res.peakBending = { moment: bend.moment, fromAxle: Math.abs(bend.x - ax), long: (bend.x - ax) * (sl - ax) > 0, t };
+      }
     }
     let liftOff = false;
     m.joints.forEach((j, ji) => {
