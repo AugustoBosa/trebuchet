@@ -30,6 +30,7 @@ export const defaults = {
   camEnd: 0.2, // ... and where it ends, when the counterweight lands
   axleLift: 0.6, // F2K: how far above the track the axle wheels start
   rollerOffset: 0.5, // F2K: fixed roller under the arm, this far from the axle toward the long end
+  impactE: 0, // restitution of parts hitting each other or the track (whipper's counterweight on the arm, F2K's wheels): 0 = thud
   rollCrr: 0.003, // wheels on their track (floating arms, F2K roller): rolling resistance (hard wheels on a rail ≈ 0.001–0.005)
   springK: 7000, // spring trebuchet: total stiffness of the springs (N/m)
   springRest: 1.5, // ... and their unstretched length (m), anchored on the ground under the short arm
@@ -65,7 +66,7 @@ export const KINDS: Record<Kind, { label: string; info: string; fields: (keyof P
   whipper: {
     label: 'Whipper',
     info: 'Variante moderna do articulado: armado com o braço longo apontando para a frente e o contrapeso deitado sobre o braço, acima do eixo. O braço tomba à frente, passa por baixo do eixo e dá a volta (~270° de giro no padrão, contra ~125° do articulado), e o contrapeso cai de cima do eixo até abaixo dele: mais energia pelo mesmo peso. A funda afrouxa e reestica com trancos, e é difícil de ajustar. Pede eixo mais alto que o braço longo. Geometria reconstruída de descrições de construtores (sem desenhos publicados).',
-    fields: [...BASE, 'cwMass', 'cwDensity', 'hingeLength', 'cockDeg', ...SHOT],
+    fields: [...BASE, 'cwMass', 'cwDensity', 'hingeLength', 'cockDeg', 'impactE', ...SHOT],
     // reconstructed from build descriptions (no published drawings): 5:1 arm ratio, axle above the long arm's reach
     preset: { pivotHeight: 5, longArm: 4, shortArm: 0.8, armMass: 50, hingeLength: 2, slingLength: 3.5, cockDeg: 45 },
   },
@@ -100,7 +101,7 @@ export const KINDS: Record<Kind, { label: string; info: string; fields: (keyof P
   f2k: {
     label: 'F2K',
     info: 'Floating Axle Trebuchet 2000: um floating arm cujas rodas do eixo começam erguidas acima do trilho. No início o braço se apoia num rolete fixo e gira sobre ele enquanto o contrapeso desce na guia; quando as rodas pousam no trilho (com tranco), segue como floating arm. Ganha queda extra do contrapeso e alcance; o pouso custa eficiência, e quanto depende da geometria: com o rolete a 0,5 m (padrão) o tranco leva ~13% da energia, com o rolete a 1 m o pouso é suave e a eficiência passa a do floating arm. Só o princípio é documentado (The Hurl): posição do rolete e altura inicial reconstruídas.',
-    fields: [...BASE, 'axleLift', 'rollerOffset', 'cwMass', 'cwDensity', 'rollCrr', ...SHOT],
+    fields: [...BASE, 'axleLift', 'rollerOffset', 'cwMass', 'cwDensity', 'rollCrr', 'impactE', ...SHOT],
     // the floating arm's default geometry, so the two compare like for like
     preset: { pivotHeight: defaults.pivotHeight, longArm: defaults.longArm, shortArm: defaults.shortArm, armMass: defaults.armMass, slingLength: defaults.slingLength, releaseDeg: defaults.releaseDeg, axleLift: defaults.axleLift, rollerOffset: defaults.rollerOffset },
   },
@@ -194,6 +195,7 @@ export function build(kind: Kind, p: Params): Mechanism {
     axle: joints.length, // the next joint pushed is the axle (pin or rolling track)
     releaseAngle: (p.releaseDeg * Math.PI) / 180,
     air: { density: p.airDensity, cd: p.dragCd },
+    ...(p.impactE ? { restitution: p.impactE } : {}),
   };
   const addCW = (pos: Vec) => {
     bodies.push({ name: 'contrapeso', mass: p.cwMass, inertia: 0.5 * p.cwMass * cwR * cwR, pos, angle: kind === 'fixed' || kind === 'walking' ? th : 0, shape: { kind: 'disk', radius: cwR } }); // welded kinds start aligned with the arm

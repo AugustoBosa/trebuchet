@@ -54,6 +54,7 @@ export interface Mechanism {
   axle: number; // joint index, reported as main structural load
   releaseAngle: number; // release when projectile velocity angle drops to this (rad above horizontal)
   air: { density: number; cd: number };
+  restitution?: number; // e of the parts' impacts (floors, rollers, stops); 0 = they thud. Ropes always snap taut inelastically.
 }
 
 // A crew pulling a rope straight down at a body point, until that point has come down to untilY (end of stroke).

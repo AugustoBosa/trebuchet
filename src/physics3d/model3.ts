@@ -52,6 +52,7 @@ export interface Mechanism3 {
   axle: number;
   releaseAngle: number;
   air: { density: number; cd: number; wind?: V3 }; // wind in the machine's frame
+  restitution?: number; // see Mechanism in physics/model.ts
   aim?: number; // rad: the whole machine turned about the vertical (three.js rotation.y sense); ranges are reported along world x
 }
 

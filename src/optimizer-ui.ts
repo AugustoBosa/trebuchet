@@ -4,7 +4,7 @@ import { armSplitRange, distinctOptima, evaluate, latinHypercube, paramMapper, s
 import type { Reply, Request } from './optimize.worker';
 import { KINDS, type Kind, type Params } from './presets';
 
-const ENVIRONMENT: (keyof Params)[] = ['airDensity', 'dragCd', 'axleMu', 'axleRadius', 'troughMu', 'rollCrr']; // conditions, not design choices
+const ENVIRONMENT: (keyof Params)[] = ['airDensity', 'dragCd', 'axleMu', 'axleRadius', 'troughMu', 'rollCrr', 'impactE']; // conditions, not design choices
 const DEFAULT_ON: (keyof Params)[] = ['slingLength', 'releaseDeg'];
 const STARTS = 8; // current design + 7 Latin-hypercube points
 

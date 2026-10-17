@@ -33,6 +33,7 @@ export interface Sketch {
   airDensity: number;
   dragCd: number;
   troughMu: number;
+  restitution?: number; // e of the parts' impacts (0 = they thud)
 }
 
 export const emptySketch = (): Sketch => ({ bodies: [], joints: [], releaseDeg: 45, airDensity: 1.225, dragCd: 0.47, troughMu: 0.3 });
@@ -147,6 +148,7 @@ export function compile(sk: Sketch): Mechanism {
     ...(springs.length ? { springs } : {}),
     releaseAngle: (sk.releaseDeg * Math.PI) / 180,
     air: { density: sk.airDensity, cd: sk.dragCd },
+    ...(sk.restitution ? { restitution: Math.min(0.95, Math.max(0, sk.restitution)) } : {}),
   };
 }
 
@@ -247,7 +249,7 @@ export function toSketch(m: Mechanism, extra: { troughMu: number }): Sketch {
     const at = w(pl.body, pl.local);
     joints.push({ kind: 'pull', a: pl.body, at, force: pl.force, stroke: at[1] - pl.untilY });
   }
-  return { bodies, joints, releaseDeg: (m.releaseAngle * 180) / Math.PI, airDensity: m.air.density, dragCd: m.air.cd, troughMu: extra.troughMu };
+  return { bodies, joints, releaseDeg: (m.releaseAngle * 180) / Math.PI, airDensity: m.air.density, dragCd: m.air.cd, troughMu: extra.troughMu, ...(m.restitution ? { restitution: m.restitution } : {}) };
 }
 
 // Every coordinate in the sketch, so coincident points can be dragged together.
@@ -337,5 +339,7 @@ export function sanitizeSketch(raw: unknown): Sketch {
   sk.airDensity = Math.max(0, num(r.airDensity, 1.225));
   sk.dragCd = Math.max(0, num(r.dragCd, 0.47));
   sk.troughMu = Math.max(0, num(r.troughMu, 0.3));
+  const e = Math.min(0.95, Math.max(0, num(r.restitution, 0)));
+  if (e) sk.restitution = e;
   return sk;
 }

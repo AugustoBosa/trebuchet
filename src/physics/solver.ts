@@ -202,7 +202,8 @@ const normalRow = (j: Mechanism['joints'][number]) => (j.kind === 'foot' ? 1 : 0
 // preload[ji]: impulse a resting contact already carries this step (normal force × dt). A jerk elsewhere only
 // unloads it by that much before it would really have to pull (a foot holding up the whole machine must not let go
 // over a tiny sling twitch); contacts just closing have none.
-function impulse(m: Mechanism, s: State, active: boolean[], mode: 'settle' | 'positions' | 'velocities', preload: number[] = []): State {
+// bounce: contacts closing in this impact that rebound with −e × their approach speed (normal row only)
+function impulse(m: Mechanism, s: State, active: boolean[], mode: 'settle' | 'positions' | 'velocities', preload: number[] = [], bounce?: Set<number>): State {
   const positions = mode === 'positions';
   const nb = m.bodies.length;
   const n = 3 * nb;
@@ -214,7 +215,7 @@ function impulse(m: Mechanism, s: State, active: boolean[], mode: 'settle' | 'po
   const A = rows.map(() => new Float64Array(k));
   const rhs = new Float64Array(k);
   for (let i = 0; i < k; i++) {
-    rhs[i] = positions ? -rows[i].C : -rows[i].Cdot;
+    rhs[i] = positions ? -rows[i].C : -rows[i].Cdot * (1 + bounceRow(m, bounce, owner, i, rows[i].Cdot, contactSign));
     for (let j = 0; j < k; j++) {
       let sum = 0;
       for (let c = 0; c < n; c++) sum += rows[i].J[c] * invM[c] * rows[j].J[c];
@@ -235,12 +236,23 @@ function impulse(m: Mechanism, s: State, active: boolean[], mode: 'settle' | 'po
     });
     if (worst >= 0) {
       active[worst] = false;
-      return impulse(m, s, active, 'settle', preload);
+      return impulse(m, s, active, 'settle', preload, bounce);
     }
   }
   const out = (positions ? s.q : s.v).slice();
   for (let i = 0; i < k; i++) for (let c = 0; c < n; c++) out[c] += invM[c] * rows[i].J[c] * lam[i];
   return positions ? { q: out, v: s.v } : { q: s.q, v: out };
+}
+
+// Restitution of row i: only a bouncing contact's first (normal) row, and only for a real approach (slower than
+// V_REST it just settles: no endless micro-bounces).
+const V_REST = 0.1; // m/s
+// (shared with the 3D solver: `sign` is the solver's contactSign)
+export const bounceRow = <J>(m: { restitution?: number; joints: J[] }, bounce: Set<number> | undefined, owner: number[], i: number, Cdot: number, sign: (j: J) => number) =>
+  bounce?.has(owner[i]) && (i === 0 || owner[i - 1] !== owner[i]) && sign(m.joints[owner[i]]) * Cdot < -V_REST ? (m.restitution ?? 0) : 0;
+// After a bouncing impact the rebounding contacts open (they fly apart until they land again).
+export function reboundOpen(bounce: Set<number>, active: boolean[], rowOf: (ji: number) => { Cdot: number }, sign: (ji: number) => number) {
+  for (const ji of bounce) if (active[ji] && sign(ji) * rowOf(ji).Cdot > 1e-6) active[ji] = false;
 }
 
 function rk4(m: Mechanism, s: State, active: boolean[], fric: number[], dt: number, a1In?: Float64Array): State {
@@ -361,6 +373,7 @@ export function simulate(
       if (j.kind === 'foot' && !active[ji]) m.joints[ji] = { kind: 'floor', a: j.a, pa: j.pa, y: 0 };
     });
     let hit = false;
+    const bounce = new Set<number>(); // contacts closing now that may rebound (restitution)
     const wasActive = active.slice();
     m.joints.forEach((j, ji) => {
       if (j.kind === 'spike') {
@@ -375,11 +388,13 @@ export function simulate(
       const sg = contactSign(j);
       if (active[ji] || !sg || j.kind === 'foot' || (ji === m.sling && res.release)) return;
       const r = jointRows(s, j, m.bodies.length)[0];
-      if (sg * r.C < 0 && sg * r.Cdot < 0) (active[ji] = true), (hit = true);
+      if (sg * r.C < 0 && sg * r.Cdot < 0) (active[ji] = true), (hit = true), sg > 0 && m.restitution && bounce.add(ji);
     });
     if (hit) {
       const preload = m.joints.map((j, ji) => (wasActive[ji] ? Math.max(0, contactSign(j) * (lambda[ji][normalRow(j)] ?? 0)) * dt : 0));
-      s = impulse(m, impulse(m, impulse(m, s, active, 'settle', preload), active, 'positions'), active, 'velocities');
+      s = impulse(m, s, active, 'settle', preload, bounce);
+      if (bounce.size) reboundOpen(bounce, active, (ji) => jointRows(s, m.joints[ji], m.bodies.length)[0], (ji) => contactSign(m.joints[ji]));
+      s = impulse(m, impulse(m, s, active, 'positions'), active, 'velocities');
     }
     if (!s.q.every(Number.isFinite)) return { ...res, error: 'Simulação divergiu (geometria impossível?)' };
 

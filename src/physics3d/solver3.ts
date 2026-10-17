@@ -1,5 +1,5 @@
 import { G } from '../physics/model';
-import { solve } from '../physics/solver';
+import { bounceRow, reboundOpen, solve } from '../physics/solver';
 import { fly3 } from './ballistics3';
 import { jointRows3, omega, point3, worldAxis, type Row3, type State3 } from './constraints3';
 import { cross, dot, rotate, rotateInv, type Joint3, type Mechanism3, type V3 } from './model3';
@@ -188,10 +188,10 @@ function normalize(q: Float64Array): Float64Array {
 }
 
 // Inelastic impact / position projection / velocity clean-up: see impulse() in physics/solver.ts.
-function impulse(m: Mechanism3, s: State3, active: boolean[], mode: 'settle' | 'positions' | 'velocities', preload: number[] = []): State3 {
+function impulse(m: Mechanism3, s: State3, active: boolean[], mode: 'settle' | 'positions' | 'velocities', preload: number[] = [], bounce?: Set<number>): State3 {
   const positions = mode === 'positions';
   const { rows, owner, Y, A } = collectRows(m, s, active);
-  const lam = solve(A, Float64Array.from(rows.map((r) => (positions ? -r.C : -r.Cdot))));
+  const lam = solve(A, Float64Array.from(rows.map((r, i) => (positions ? -r.C : -r.Cdot * (1 + bounceRow(m, bounce, owner, i, r.Cdot, contactSign))))));
   if (mode === 'settle') {
     const tol = 1e-6 * Math.max(...Array.from(lam, Math.abs)) + 1e-9;
     let worst = -1, worstVal = -tol;
@@ -202,7 +202,7 @@ function impulse(m: Mechanism3, s: State3, active: boolean[], mode: 'settle' | '
     });
     if (worst >= 0) {
       active[worst] = false;
-      return impulse(m, s, active, 'settle', preload);
+      return impulse(m, s, active, 'settle', preload, bounce);
     }
   }
   const d = new Float64Array(s.v.length);
@@ -308,6 +308,7 @@ export function simulate3(m: Mechanism3, opts: { dt?: number; tMax?: number; fra
       if (j.kind === 'foot' && !active[ji]) m.joints[ji] = { kind: 'floor', a: j.a, pa: j.pa, y: 0 };
     });
     let hit = false;
+    const bounce = new Set<number>();
     const wasActive = active.slice();
     m.joints.forEach((j, ji) => {
       if (j.kind === 'spike') {
@@ -322,11 +323,13 @@ export function simulate3(m: Mechanism3, opts: { dt?: number; tMax?: number; fra
       const sg = contactSign(j);
       if (active[ji] || !sg || j.kind === 'foot' || (ji === m.sling && res.release)) return;
       const r = jointRows3(s, j, nb)[0];
-      if (sg * r.C < 0 && sg * r.Cdot < 0) (active[ji] = true), (hit = true);
+      if (sg * r.C < 0 && sg * r.Cdot < 0) (active[ji] = true), (hit = true), sg > 0 && m.restitution && bounce.add(ji);
     });
     if (hit) {
       const preload = m.joints.map((j, ji) => (wasActive[ji] ? Math.max(0, contactSign(j) * (lambda[ji][normalRow(j)] ?? 0)) * dt : 0));
-      s = impulse(m, impulse(m, impulse(m, s, active, 'settle', preload), active, 'positions'), active, 'velocities');
+      s = impulse(m, s, active, 'settle', preload, bounce);
+      if (bounce.size) reboundOpen(bounce, active, (ji) => jointRows3(s, m.joints[ji], nb)[0], (ji) => contactSign(m.joints[ji]));
+      s = impulse(m, impulse(m, s, active, 'positions'), active, 'velocities');
     }
     if (!s.q.every(Number.isFinite)) return { ...res, error: 'Simulação divergiu (geometria impossível?)' };
 
