@@ -16,6 +16,21 @@ Só restam itens que dependem de dados que não existem em fonte pública. Retom
    - **BAKA:** a sigla não é definida em nenhuma fonte.
    - **Fiffer:** a topologia está descrita pelo construtor de um protótipo (vídeo "Fiffer explanation", beardedone85, 2011): viga do contrapeso articulada atrás, duas barras em tesoura empurrando um pino para baixo e para a frente, e uma correia que puxa a ponta curta do braço por um came. Uma reconstrução com proporções estimadas puxava a correia só ~8 cm e travava num ponto morto aos ~41° de queda da viga; um resultado aparentemente bom (~102 m) vinha de energia criada nesse travamento. Falta o arranjo real da tesoura e o raio do came.
 
+## 2026-10-17: seis melhorias (dispersão, flexão, Aprenda 3D, exportação, atrito implícito, construção em 3D)
+
+1. **Dispersão (3D).** O botão "Dispersão" dispara 40 vezes com pequenas variações (soltura ±1°, rajadas de 1,5 m/s, pino ±1 cm, semente fixa) em vários workers e mostra os pontos de queda com as elipses de 1σ e 2σ.
+   - Exemplo: o articulado com vento de 3 m/s dá alcance 224,3 ± 2,7 m, lateral 2,7 ± 1,1 m e elipse 2σ de 10,8 × 4,6 m.
+   - `scatterStats` testado em 20 mil pontos gaussianos sintéticos.
+2. **Pico de flexão no braço (2D e 3D).** Novo card com o momento máximo até a soltura e onde ele ocorre (quase sempre no eixo; 21 kN·m no articulado).
+   - O cálculo soma as reações das juntas e o peso e a inércia distribuídos do braço (d'Alembert).
+   - Validado: balanço parado dá mgL/2 na raiz; barra articulada solta da horizontal dá mgL/27 a L/3 do pino; 3D = 2D em 1e-6 nos 13 tipos.
+3. **Aprenda: seção 10, "Em três dimensões".** Explica a paridade 2D/3D, o solver 3D e a sua validação, o que tira o tiro do plano, a mira, a dispersão e a flexão (σ = M/W). Traz um gráfico calculado ao vivo do desvio × vento cruzado: 0,81 m por m/s; pino a 25 cm desloca a curva ~1,6 m; 1° de mira, ~3,9 m.
+4. **Exportar a máquina** em glTF (.glb, metros) ou STL (milímetros), só as peças sólidas e sempre na pose armada.
+5. **Atrito resolvido junto com as restrições (2D e 3D).** A força de atrito entra na coluna da junta (Ĵ = J + c·D), sem a normal defasada de um passo.
+   - Validado: um bloco a 3 m/s com μ 0,3 para em v₀²/(2μg) nos dois solvers.
+   - O erro de 0,29% do F2K com o passo de 2 ms do otimizador não vinha da defasagem: vem da suavização do sinal do atrito de rolamento quando o braço começa a deslizar (0,03% sem rolamento). Fica documentado.
+6. **Construir no 3D (editor livre).** Barra, massa, projétil, contrapeso, pino, solda, corda e apagar num plano de trabalho z, com encaixe nos nós e na grade. Um esboço que ainda não compila aparece como peças soltas. Teste: um trebuchet montado clique a clique dispara, e no plano z = 0,5 m cai exatamente 0,5 m de lado.
+
 ## 2026-10-17: itens em aberto fechados (branch `feat/3d`)
 
 - **Tambor espelhado:** novo campo `Cam.dir` (2D e 3D). O editor escolhe o sentido pelo lado para onde a corda sai (polia ou contrapeso). Um MURLIN espelhado agora derruba o contrapeso exatamente como o original (teste `camdir`).
