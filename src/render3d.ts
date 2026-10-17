@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+import { STLExporter } from 'three/addons/exporters/STLExporter.js';
 import { css, cssHeight } from './charts';
 import { camRope } from './physics/constraints';
 import { twist } from './physics3d/constraints3';
@@ -35,8 +37,9 @@ export function createView3d(canvas: HTMLCanvasElement) {
   const wire = { ink: new THREE.LineBasicMaterial(), muted: new THREE.LineBasicMaterial(), accent: new THREE.LineBasicMaterial() };
   const flightMat = new THREE.LineDashedMaterial({ dashSize: 1, gapSize: 1 });
   const nodeMat = new THREE.MeshBasicMaterial({ depthTest: false, transparent: true, opacity: 0.85 }); // nodes stay visible inside parts
-  let built: { m: Mechanism3; r: Result3; group: THREE.Group; update: (q: Float64Array, t: number) => void } | undefined;
+  let built: { m: Mechanism3; r: Result3; group: THREE.Group; machine: THREE.Group; update: (q: Float64Array, t: number) => void } | undefined;
   let span0 = 0;
+  let shown: { q: Float64Array; t: number } | undefined; // the pose on screen
   const scatterGroup = new THREE.Group(); // landing points + 1σ/2σ ellipses (world frame, on the ground)
   scene.add(scatterGroup);
 
@@ -218,14 +221,14 @@ export function createView3d(canvas: HTMLCanvasElement) {
 
     // recenter on every build, keeping the user's orbit angle (not while a node is being edited: the view would slide
     // under the cursor); reset the distance only if the machine changed size a lot
-    if (sel >= 0 && span0) return { m, r, group: root, update };
+    if (sel >= 0 && span0) return { m, r, group: root, machine: group, update };
     const c = box.getCenter(new THREE.Vector3());
     const off = camera.position.clone().sub(controls.target);
     if (!span0 || span / span0 > 1.5 || span0 / span > 1.5) off.set(-0.3 * span, 0.15 * span, 0.8 * span), (span0 = span);
     controls.target.copy(c);
     camera.position.copy(c).add(off);
     controls.update();
-    return { m, r, group: root, update };
+    return { m, r, group: root, machine: group, update };
   }
 
   return {
@@ -249,8 +252,34 @@ export function createView3d(canvas: HTMLCanvasElement) {
         scene.add(built.group);
       }
       const dtF = r.frames.length > 1 ? r.frames[1].t - r.frames[0].t : 1;
-      built.update(r.frames[Math.min(r.frames.length - 1, Math.round(t / dtF))].q, t);
+      shown = { q: r.frames[Math.min(r.frames.length - 1, Math.round(t / dtF))].q, t };
+      built.update(shown.q, t);
       render();
+    },
+    // The machine's solid parts in its cocked pose (stone in place), for CAD or a 3D printer: glTF binary in meters,
+    // or binary STL in millimeters (STL has no units; CAD and slicers read mm). Ropes, flight path, grid, nodes left out.
+    async exportModel(format: 'glb' | 'stl'): Promise<Blob | undefined> {
+      if (!built) return undefined;
+      built.update(built.r.frames[0].q, 0);
+      built.machine.updateMatrixWorld(true);
+      const solid = new THREE.Group();
+      built.machine.traverse((o) => {
+        if (!(o as THREE.Mesh).isMesh) return;
+        const c = (o as THREE.Mesh).clone();
+        c.matrixAutoUpdate = false;
+        c.matrix.copy(o.matrixWorld);
+        solid.add(c);
+      });
+      if (shown) built.update(shown.q, shown.t), render(); // back to what was on screen
+      if (format === 'stl') {
+        solid.scale.setScalar(1000);
+        solid.matrixAutoUpdate = true;
+        solid.updateMatrixWorld(true);
+        const data = new STLExporter().parse(solid, { binary: true });
+        return new Blob([data.buffer as ArrayBuffer], { type: 'model/stl' });
+      }
+      const glb = await new GLTFExporter().parseAsync(solid, { binary: true });
+      return new Blob([glb as ArrayBuffer], { type: 'model/gltf-binary' });
     },
     // landing scatter on the ground (undefined: clear); the camera flies over to it
     setScatter(pts: [number, number][] | undefined, s?: Scatter) {

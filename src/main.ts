@@ -195,6 +195,14 @@ $('view3d').addEventListener('click', async (e) => {
 });
 for (const id of ['wind', 'pin', 'aim']) $(id).addEventListener('change', () => (current && machine.dataset.mode === 'play' ? run() : preview()));
 $('edit3d').addEventListener('click', () => preview());
+for (const fmt of ['glb', 'stl'] as const)
+  $(`${fmt}3d`).addEventListener('click', async () => {
+    const blob = await view3d?.exportModel(fmt);
+    if (!blob) return;
+    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `${$<HTMLInputElement>('name').value || 'trebuchet'}.${fmt}` });
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
 
 
 function drawAt(t: number) {
