@@ -50,6 +50,19 @@ const V_SLIP = 0.01; // m/s or rad/s: tanh smooths Coulomb's sign() so the integ
 // Floor and roller contacts are exact; a journal's |F| and a two-sided track's sign come from the previous step's
 // multipliers (prev), only the direction/sign lags, never the magnitude.
 // ponytail: no stiction (tanh-regularized sign; measured ≤ 0.019 % effect on every preset at 10× sharper)
+// Did a friction direction move? (the first `rowsOf(j)` multipliers of each friction joint, as a vector: a journal's
+// reaction, a two-sided track's normal): turned by more than ~2.5°, flipped, or appeared.
+export function frictionDirsChanged<J>(joints: J[], active: boolean[], dirs: number[][], cur: number[][], rowsOf: (j: J) => number) {
+  return joints.some((j, ji) => {
+    const n = rowsOf(j);
+    if (!n || !active[ji]) return false;
+    const a = (dirs[ji] ?? []).slice(0, n), b = cur[ji].slice(0, n);
+    const la = Math.hypot(...a), lb = Math.hypot(...b);
+    if (!lb) return false;
+    return !la || a.reduce((s, x, i) => s + x * (b[i] ?? 0), 0) / (la * lb) < 0.999;
+  });
+}
+
 function frictionColumns(m: Mechanism, s: State, active: boolean[], prev: number[][], n: number) {
   const cols = new Map<number, { c: number[]; D: Float64Array }>(); // joint index → per-row coefficients, direction
   m.joints.forEach((j, ji) => {
@@ -148,14 +161,6 @@ export function accelerations(m: Mechanism, s: State, active: boolean[], prev: n
     for (const r of jointRows(s, m.joints[ji], nb)) rows.push(r), owner.push(ji);
   }
   const k = rows.length;
-  // Ĵ: the rows' force directions with their joint's friction folded in (row r of a joint gets c[r]·D)
-  const fc = frictionColumns(m, s, active, prev, n);
-  const Jh = rows.map((r, i) => {
-    const col = fc.get(owner[i]);
-    if (!col) return r.J;
-    const rIn = i - owner.indexOf(owner[i]), cr = col.c[rIn] ?? 0;
-    return cr ? r.J.map((x, c) => x + cr * col.D[c]) : r.J;
-  });
   // Each row touches at most two bodies (≤6 nonzeros): iterate only those. Skipped terms are exact zeros.
   const nzOf = (J: Float64Array) => {
     const idx: number[] = [];
@@ -163,6 +168,36 @@ export function accelerations(m: Mechanism, s: State, active: boolean[], prev: n
     return idx;
   };
   const nz = rows.map((r) => nzOf(r.J));
+  const perJoint = (lam: Float64Array) => {
+    const l: number[][] = m.joints.map(() => []);
+    for (let i = 0; i < k; i++) l[owner[i]].push(lam[i]);
+    return l;
+  };
+  // friction directions/sides come from `dirs`; if the solve says a journal's reaction turned or a track's load changed
+  // side, solve again with the new ones (at most twice): no step of lag even when a two-sided track's load flips
+  let dirs = prev;
+  let sys = system(dirs);
+  for (let it = 0; it < 2; it++) {
+    const cur = perJoint(sys.lam);
+    if (!frictionDirsChanged(m.joints, active, dirs, cur, (j) => (j.kind === 'pin' && j.friction ? 2 : j.kind === 'slider' && j.mu ? 1 : 0))) break;
+    (dirs = cur), (sys = system(dirs));
+  }
+  const { lam, Jh, nzh } = sys;
+  const f = F.slice();
+  for (let i = 0; i < k; i++) for (const c of nzh[i]) f[c] += Jh[i][c] * lam[i];
+  const a = new Float64Array(n);
+  for (let c = 0; c < n; c++) a[c] = invM[c] * f[c];
+  return { a, lambda: perJoint(lam) };
+
+  function system(dirs: number[][]) {
+  // Ĵ: the rows' force directions with their joint's friction folded in (row r of a joint gets c[r]·D)
+  const fc = frictionColumns(m, s, active, dirs, n);
+  const Jh = rows.map((r, i) => {
+    const col = fc.get(owner[i]);
+    if (!col) return r.J;
+    const rIn = i - owner.indexOf(owner[i]), cr = col.c[rIn] ?? 0;
+    return cr ? r.J.map((x, c) => x + cr * col.D[c]) : r.J;
+  });
   const nzh = Jh.map((J, i) => (J === rows[i].J ? nz[i] : nzOf(J)));
   const A = rows.map(() => new Float64Array(k));
   const rhs = new Float64Array(k);
@@ -179,14 +214,8 @@ export function accelerations(m: Mechanism, s: State, active: boolean[], prev: n
     // ponytail: tiny regularization so redundant joints (free editor) stay solvable; least-squares if it misbehaves
     A[i][i] += 1e-10 * A[i][i] + 1e-14;
   }
-  const lam = solve(A, rhs);
-  const f = F.slice();
-  for (let i = 0; i < k; i++) for (const c of nzh[i]) f[c] += Jh[i][c] * lam[i];
-  const a = new Float64Array(n);
-  for (let c = 0; c < n; c++) a[c] = invM[c] * f[c];
-  const lambda: number[][] = m.joints.map(() => []);
-  for (let i = 0; i < k; i++) lambda[owner[i]].push(lam[i]);
-  return { a, lambda };
+  return { lam: solve(A, rhs), Jh, nzh };
+  }
 }
 
 // Classic RK4 on (q, v). Plain loops, same arithmetic order as the textbook form (results are bit-identical
@@ -391,6 +420,7 @@ export function simulate(
       if (j.kind === 'foot' && !active[ji]) m.joints[ji] = { kind: 'floor', a: j.a, pa: j.pa, y: 0 };
     });
     let hit = false;
+    let uHit = 1; // where inside the step the first new contact closed (0 = start, 1 = end)
     const bounce = new Set<number>(); // contacts closing now that may rebound (restitution)
     const wasActive = active.slice();
     m.joints.forEach((j, ji) => {
@@ -400,19 +430,29 @@ export function simulate(
           const B = point(before, j.a, j.pa).p; // bite where the path crossed y = 0 inside the step, not at its end
           const x = B[0] + ((P.p[0] - B[0]) * B[1]) / (B[1] - P.p[1]);
           (m.joints[ji] = { kind: 'foot', a: j.a, pa: j.pa, at: [x, 0] }), (active[ji] = true), (hit = true);
+          if (B[1] > 0) uHit = Math.min(uHit, B[1] / (B[1] - P.p[1]));
         }
         return;
       }
       const sg = contactSign(j);
       if (active[ji] || !sg || j.kind === 'foot' || (ji === m.sling && res.release)) return;
       const r = jointRows(s, j, m.bodies.length)[0];
-      if (sg * r.C < 0 && sg * r.Cdot < 0) (active[ji] = true), (hit = true), sg > 0 && m.restitution && bounce.add(ji);
+      if (sg * r.C < 0 && sg * r.Cdot < 0) {
+        (active[ji] = true), (hit = true), sg > 0 && m.restitution && bounce.add(ji);
+        const Cb = sg * jointRows(before, j, m.bodies.length)[0].C;
+        if (Cb > 0) uHit = Math.min(uHit, Cb / (Cb - sg * r.C));
+      }
     });
     if (hit) {
+      // The impact happens where the contact closed, not at the end of the step (that shifted F2K's landing by up to a
+      // step: 0.29 % range at 2 ms): back up to that instant (linear in the step), hit there, then finish the step.
+      const partial = uHit < 1 - 1e-9;
+      if (partial) s = { q: before.q.map((x, c) => x + uHit * (s.q[c] - x)), v: before.v.map((x, c) => x + uHit * (s.v[c] - x)) };
       const preload = m.joints.map((j, ji) => (wasActive[ji] ? Math.max(0, contactSign(j) * (lambda[ji][normalRow(j)] ?? 0)) * dt : 0));
       s = impulse(m, s, active, 'settle', preload, bounce);
       if (bounce.size) reboundOpen(bounce, active, (ji) => jointRows(s, m.joints[ji], m.bodies.length)[0], (ji) => contactSign(m.joints[ji]));
       s = impulse(m, impulse(m, s, active, 'positions'), active, 'velocities');
+      if (partial) s = rk4(m, s, active, prev, (1 - uHit) * dt);
     }
     if (!s.q.every(Number.isFinite)) return { ...res, error: 'Simulação divergiu (geometria impossível?)' };
 

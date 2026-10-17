@@ -11,7 +11,7 @@ const drop = (e: number): Mechanism => ({
   projectile: 0, sling: 0, axle: 0, releaseAngle: -Infinity, air: { density: 0, cd: 0 }, restitution: e,
 });
 const apex = (ys: number[]) => {
-  const hit = ys.findIndex((y, i) => i > 0 && y <= 0.1 + 1e-9 && ys[i - 1] > y); // first landing
+  const hit = ys.findIndex((y, i) => i > 0 && y < ys[i - 1] && y <= ys[i + 1]); // first landing: the first lowest point
   return Math.max(...ys.slice(hit + 1)) - 0.1; // highest point after the first landing (the rebound; 1.2 s is too short for a second one to top it)
 };
 

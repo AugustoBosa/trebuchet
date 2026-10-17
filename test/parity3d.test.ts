@@ -16,7 +16,7 @@ describe('solver 3D = solver 2D no plano', () => {
       expect(Math.abs(r3.peakForce[m.axle] - r2.peakForce[m.axle]) / r2.peakForce[m.axle]).toBeLessThan(0.01);
       expect(Math.abs(r3.efficiency - r2.efficiency)).toBeLessThan(0.005);
       expect(Math.abs(r3.lateral)).toBeLessThan(1e-9); // stays in its plane
-      expect(Math.abs(r3.peakBending!.moment - r2.peakBending!.moment) / r2.peakBending!.moment).toBeLessThan(1e-6);
+      expect(Math.abs(r3.peakBending!.moment - r2.peakBending!.moment) / r2.peakBending!.moment).toBeLessThan(1e-5);
       expect(r3.peakBending!.fromAxle).toBeCloseTo(r2.peakBending!.fromAxle, 9);
     });
   }

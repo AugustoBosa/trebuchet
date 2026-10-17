@@ -328,6 +328,7 @@ export function simulate3(m: Mechanism3, opts: { dt?: number; tMax?: number; fra
       if (j.kind === 'foot' && !active[ji]) m.joints[ji] = { kind: 'floor', a: j.a, pa: j.pa, y: 0 };
     });
     let hit = false;
+    let uHit = 1; // see the planar solver: where in the step the first new contact closed
     const bounce = new Set<number>();
     const wasActive = active.slice();
     m.joints.forEach((j, ji) => {
@@ -337,19 +338,27 @@ export function simulate3(m: Mechanism3, opts: { dt?: number; tMax?: number; fra
           const B = point3(before, j.a, j.pa).p; // bite where the path crossed y = 0 inside the step
           const u = B[1] / (B[1] - S.p[1]);
           (m.joints[ji] = { kind: 'foot', a: j.a, pa: j.pa, at: [B[0] + u * (S.p[0] - B[0]), 0, B[2] + u * (S.p[2] - B[2])] }), (active[ji] = true), (hit = true);
+          if (B[1] > 0) uHit = Math.min(uHit, u);
         }
         return;
       }
       const sg = contactSign(j);
       if (active[ji] || !sg || j.kind === 'foot' || (ji === m.sling && res.release)) return;
       const r = jointRows3(s, j, nb)[0];
-      if (sg * r.C < 0 && sg * r.Cdot < 0) (active[ji] = true), (hit = true), sg > 0 && m.restitution && bounce.add(ji);
+      if (sg * r.C < 0 && sg * r.Cdot < 0) {
+        (active[ji] = true), (hit = true), sg > 0 && m.restitution && bounce.add(ji);
+        const Cb = sg * jointRows3(before, j, nb)[0].C;
+        if (Cb > 0) uHit = Math.min(uHit, Cb / (Cb - sg * r.C));
+      }
     });
     if (hit) {
+      const partial = uHit < 1 - 1e-9; // hit where the contact closed, then finish the step
+      if (partial) s = { q: normalize(before.q.map((x, c) => x + uHit * (s.q[c] - x))), v: before.v.map((x, c) => x + uHit * (s.v[c] - x)) };
       const preload = m.joints.map((j, ji) => (wasActive[ji] ? Math.max(0, contactSign(j) * (lambda[ji][normalRow(j)] ?? 0)) * dt : 0));
       s = impulse(m, s, active, 'settle', preload, bounce);
       if (bounce.size) reboundOpen(bounce, active, (ji) => jointRows3(s, m.joints[ji], nb)[0], (ji) => contactSign(m.joints[ji]));
       s = impulse(m, impulse(m, s, active, 'positions'), active, 'velocities');
+      if (partial) s = rk4(m, s, active, prev, (1 - uHit) * dt);
     }
     if (!s.q.every(Number.isFinite)) return { ...res, error: 'Simulação divergiu (geometria impossível?)' };
 
