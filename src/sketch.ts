@@ -13,7 +13,7 @@ export type SBody = (
   | { kind: 'disk'; name: string; c: Vec; r: number; mass: number; role?: Role }
 ) & { z?: Depth };
 export type SJoint = (
-  | { kind: 'pin' | 'weld'; at: Vec; a: number; b: number | 'ground'; mu?: number; radius?: number }
+  | { kind: 'pin' | 'weld'; at: Vec; a: number; b: number | 'ground'; mu?: number; radius?: number; pitch?: number; yaw?: number } // pitch/yaw (°): a pin's axis tilted out of the across direction, 3D only
   | { kind: 'rope'; a: number; pa: Vec; b: number | 'ground'; pb: Vec }
   | { kind: 'slider'; a: number; at: Vec; dir: Vec }
   | { kind: 'pull'; a: number; at: Vec; force: number; stroke: number } // crew rope pulled straight down
@@ -299,7 +299,8 @@ export function sanitizeSketch(raw: unknown): Sketch {
     if (j.kind === 'pin' || j.kind === 'weld') {
       const b = ref(j.b);
       if (b === -1) continue;
-      sk.joints.push({ kind: j.kind, at: vec(j.at), a, b, ...(j.kind === 'pin' && j.mu ? { mu: num(j.mu, 0), radius: pos(j.radius, 0.05) } : {}) });
+      const tilt = j.kind === 'pin' ? Object.fromEntries((['pitch', 'yaw'] as const).flatMap((k) => (num(j[k], 0) ? [[k, Math.max(-45, Math.min(45, num(j[k], 0)))]] : []))) : {};
+      sk.joints.push({ kind: j.kind, at: vec(j.at), a, b, ...(j.kind === 'pin' && j.mu ? { mu: num(j.mu, 0), radius: pos(j.radius, 0.05) } : {}), ...tilt });
     } else if (j.kind === 'rope') {
       const b = ref(j.b);
       if (b !== -1) sk.joints.push({ kind: 'rope', a, pa: vec(j.pa), b, pb: vec(j.pb) });

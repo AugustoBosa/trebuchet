@@ -105,12 +105,13 @@ export function createView3d(canvas: HTMLCanvasElement) {
 
     for (const j of m.joints) {
       if (j.kind === 'pin' && j.b === 'ground') {
-        const [px, py, pz] = j.pb;
-        for (const z of [pz - W, pz + W]) {
-          beam([px - py * 0.5, 0, z], [px, py, z], th, solid.muted, group);
-          beam([px + py * 0.5, 0, z], [px, py, z], th, solid.muted, group);
+        // axle along the pin's axis (tilted pins too), an A-frame under each end
+        const ends = [-W, W].map((k): V3 => [j.pb[0] + k * j.axisB[0], j.pb[1] + k * j.axisB[1], j.pb[2] + k * j.axisB[2]]);
+        for (const [x, y, z] of ends) {
+          beam([x - y * 0.5, 0, z], [x, y, z], th, solid.muted, group);
+          beam([x + y * 0.5, 0, z], [x, y, z], th, solid.muted, group);
         }
-        beam([px, py, pz - W], [px, py, pz + W], 0.7 * th, solid.muted, group); // axle
+        beam(ends[0], ends[1], 0.7 * th, solid.muted, group); // axle
       } else if (j.kind === 'slider') {
         const k = span / Math.hypot(...j.dir);
         for (const z of [-0.6 * W, 0.6 * W])

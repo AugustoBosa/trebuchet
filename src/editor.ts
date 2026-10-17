@@ -406,7 +406,9 @@ export function createEditor(o: {
       const names: Record<SJoint['kind'], string> = { pin: 'Pino', weld: 'Solda', rope: 'Corda', slider: 'Trilho', pull: 'Equipe (tração)', stop: 'Apoio (pode descolar)', foot: 'Pé com espinhos (não escorrega, pode descolar)',
         spike: 'Espetos no ar (cravam onde tocarem o chão)', roller: 'Rolete fixo (a barra desliza sobre ele)', floor: 'Chão sob este ponto', spring: 'Mola até uma âncora fixa', cam: 'Tambor em espiral (corda do contrapeso)' };
       html += `<p><b>${names[j.kind]}</b>${'b' in j && j.b === 'ground' ? ' (preso ao chão)' : ''}</p>`;
-      if (j.kind === 'pin') html += field('Atrito μ', 'mu', j.mu ?? 0) + field('Raio do eixo (m)', 'radius', j.radius ?? 0.05);
+      if (j.kind === 'pin') html += field('Atrito μ', 'mu', j.mu ?? 0) + field('Raio do eixo (m)', 'radius', j.radius ?? 0.05) +
+        field('Eixo: inclinação (°, 3D)', 'pitch', j.pitch ?? 0) + field('Eixo: guinada (°, 3D)', 'yaw', j.yaw ?? 0) +
+        `<p class="muted">Inclinação ergue um lado do eixo; guinada o gira em planta. Só valem na Vista 3D: o eixo deixa de ser perpendicular ao plano e o braço gira num plano torto (máximo ±45°).</p>`;
       if (j.kind === 'pull') html += field('Força da equipe (N)', 'force', j.force) + field('Curso do puxão (m)', 'stroke', j.stroke) +
         `<p class="muted">Uma pessoa puxa ~200–300 N num puxão curto. Energia = força × curso = ${((j.force * j.stroke) / 1000).toFixed(1)} kJ.</p>`;
       if (j.kind === 'rope') html += `<p class="muted">Comprimento: ${d2(j.pa, j.pb).toFixed(2)} m</p>`;
@@ -441,7 +443,10 @@ export function createEditor(o: {
       } else if (Number.isFinite(num) && num > 0) (b as unknown as Record<string, number>)[k] = num;
     } else if (sel?.type === 'joint') {
       const j = sk.joints[sel.i];
-      if (j.kind === 'pin' && Number.isFinite(num) && num >= 0) j[k as 'mu' | 'radius'] = num;
+      if (j.kind === 'pin' && (k === 'pitch' || k === 'yaw') && Number.isFinite(num)) {
+        if (num) j[k] = Math.max(-45, Math.min(45, num));
+        else delete j[k];
+      } else if (j.kind === 'pin' && Number.isFinite(num) && num >= 0) j[k as 'mu' | 'radius'] = num;
       if (j.kind === 'pull' && Number.isFinite(num) && num > 0) j[k as 'force' | 'stroke'] = num;
       if (j.kind === 'floor' && Number.isFinite(num)) j.y = num;
       if (j.kind === 'spring' && Number.isFinite(num) && num > 0) j[k as 'k' | 'rest'] = num;

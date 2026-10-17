@@ -41,4 +41,20 @@ describe('esboço em 3D', () => {
     expect(r.error).toBeUndefined();
     expect(Math.abs(r.lateral)).toBeGreaterThan(0.1); // an arm tilted out of the plane throws sideways
   });
+
+  it('eixo torto (guinada ±2°): o braço gira num plano torto e o tiro sai de lado, simétrico', () => {
+    const lat = (yaw: number) => {
+      const sk = sketchOf('hinged');
+      const axle = sk.joints.find((j) => j.kind === 'pin' && j.b === 'ground')!;
+      if (axle.kind === 'pin') axle.yaw = yaw;
+      const r = simulate3(compile3(sk), { afterRelease: 0 });
+      expect(r.error).toBeUndefined();
+      return r;
+    };
+    const [a, b, c] = [lat(2), lat(-2), lat(0)];
+    expect(Math.abs(a.lateral)).toBeGreaterThan(1);
+    expect(b.lateral).toBeCloseTo(-a.lateral, 6);
+    expect(Math.abs(c.lateral)).toBeLessThan(1e-9);
+    expect(a.range).toBeCloseTo(b.range, 6);
+  }, 20_000);
 });

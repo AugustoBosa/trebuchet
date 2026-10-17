@@ -42,9 +42,15 @@ function rodQuat(A: V3, B: V3): Quat {
   return quatFromAxes(ex, cross(ez, ex), ez);
 }
 
+// a pin's world axis: z (across the machine) raised by pitch toward +y and turned by yaw toward +x, in degrees
+export function pinAxis(pitch: number, yaw: number): V3 {
+  const p = (pitch * Math.PI) / 180, y = (yaw * Math.PI) / 180;
+  return [Math.sin(y) * Math.cos(p), Math.sin(p), Math.cos(y) * Math.cos(p)];
+}
+
 export function compile3(sk: Sketch): Mechanism3 {
   const m3 = lift(compile(sk)); // compile() validates and fixes the joint order
-  if (!sk.bodies.some((b) => b.z) && !sk.joints.some((j) => j.z)) return m3;
+  if (!sk.bodies.some((b) => b.z) && !sk.joints.some((j) => j.z || (j.kind === 'pin' && (j.pitch || j.yaw)))) return m3;
   m3.bodies = sk.bodies.map((b, i) => {
     const b3 = m3.bodies[i];
     if (b.kind === 'disk') return { ...b3, pos: at3(b.c, zOf(b, 'c')) };
@@ -55,15 +61,17 @@ export function compile3(sk: Sketch): Mechanism3 {
   });
   const s0 = initialState3(m3);
   const local = (i: BodyRef, w: V3): V3 => (i === 'ground' ? w : rotateInv(m3.bodies[i].quat, 0, sub(w, m3.bodies[i].pos)));
-  const axisIn = (i: BodyRef): V3 => (i === 'ground' ? Z : rotateInv(m3.bodies[i].quat, 0, Z));
+  const axisIn = (i: BodyRef, n: V3 = Z): V3 => (i === 'ground' ? n : rotateInv(m3.bodies[i].quat, 0, n));
   const sj = sk.joints.filter((j) => j.kind !== 'pull' && j.kind !== 'spring'); // same order as compile()'s joints
   m3.joints = m3.joints.map((j, k) => {
     const s = sj[k];
     if (!s) return j; // the trough floor compile() appends
     const P = 'at' in s ? at3(s.at, zOf(s, 'at')) : undefined;
     switch (j.kind) {
-      case 'pin':
-        return { ...j, pa: local(j.a, P!), pb: local(j.b, P!), axis: axisIn(j.a), axisB: axisIn(j.b) };
+      case 'pin': {
+        const n = s.kind === 'pin' ? pinAxis(s.pitch ?? 0, s.yaw ?? 0) : Z;
+        return { ...j, pa: local(j.a, P!), pb: local(j.b, P!), axis: axisIn(j.a, n), axisB: axisIn(j.b, n) };
+      }
       case 'weld':
         return { ...j, pa: local(j.a, P!), pb: local(j.b, P!), axis: axisIn(j.a), axisB: axisIn(j.b), angle: twist(s0, j.a, j.b, axisIn(j.b)) };
       case 'rope': {
