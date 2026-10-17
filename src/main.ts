@@ -381,7 +381,7 @@ function preview3d(v: View3d) {
   if ((!m || !m3) && !isFree()) return v.setHandles(undefined);
   if (m3) v.draw(m3, still3(m3), 0, bounds());
   else v.drawSketch(editor.get(), bounds()); // still being built: show the parts as drawn
-  const status = (label?: string) => ($('node3d').textContent = label ? `Nó: ${label}. Arraste as setas.` : 'Clique num ponto laranja para movê-lo.');
+  const status = (label?: string) => ($('node3d').textContent = label ? `Nó: ${label}. Arraste as setas (ou use as do teclado; Enter confirma).` : 'Clique num ponto laranja para movê-lo (teclado: N escolhe um nó).');
   if (isFree()) {
     const sk = editor.get();
     const nodes = nodes3(sk);

@@ -75,6 +75,55 @@ export function createView3d(canvas: HTMLCanvasElement) {
     events?.select?.(handles[i]?.label);
     render();
   };
+  // --- keyboard: the canvas takes focus. No node chosen: arrows pan, Shift+arrows turn (OrbitControls), + / − zoom,
+  // 0 re-frames. N / Shift+N pick the next / previous node; then arrows move it in x and y, PageUp/PageDown in z
+  // (5 cm, Shift: 1 cm), Enter commits (fires the shot for a preset), Esc lets go.
+  canvas.tabIndex = 0;
+  controls.keyRotateSpeed = 10; // ≈ 8° per press instead of < 1°
+  let keyMoved = false;
+  const commit = () => keyMoved && ((keyMoved = false), events?.end());
+  const announce = (i: number) => {
+    const h = handles[i], f = (v: number) => v.toFixed(2);
+    events?.select?.(`${h.label} (x ${f(h.p[0])}, y ${f(h.p[1])}, z ${f(h.p[2])} m)`);
+  };
+  canvas.addEventListener('keydown', (e) => {
+    const key = e.key;
+    if ((key === 'n' || key === 'N') && handles.length) {
+      e.preventDefault();
+      const n = handles.length;
+      select(key === 'N' ? (sel < 0 ? n - 1 : (sel + n - 1) % n) : (sel + 1) % n);
+      return announce(sel);
+    }
+    if (sel >= 0) {
+      const step = e.shiftKey ? 0.01 : 0.05;
+      const d: V3 = [key === 'ArrowRight' ? step : key === 'ArrowLeft' ? -step : 0, key === 'ArrowUp' ? step : key === 'ArrowDown' ? -step : 0, key === 'PageUp' ? step : key === 'PageDown' ? -step : 0];
+      if (key === 'Enter' || key === 'Escape') {
+        e.preventDefault();
+        commit();
+        if (key === 'Escape') select(-1);
+        return;
+      }
+      if (!d[0] && !d[1] && !d[2]) return;
+      e.preventDefault();
+      e.stopImmediatePropagation(); // the arrows move the node, not the camera
+      const h = handles[sel], axis = d[0] ? 'x' : d[1] ? 'y' : 'z';
+      if (!h.axes.includes(axis)) return void events?.select?.(`${h.label}: este nó não se move em ${axis}`);
+      keyMoved = true;
+      events?.move(sel, [h.p[0] + d[0], h.p[1] + d[1], h.p[2] + d[2]]);
+      return announce(sel);
+    }
+    if (key === '+' || key === '=' || key === '-' || key === '0') {
+      e.preventDefault();
+      const off = camera.position.clone().sub(controls.target);
+      if (key === '0') off.set(-0.3, 0.15, 0.8).multiplyScalar(span0 || 10);
+      else off.multiplyScalar(key === '-' ? 1.2 : 1 / 1.2);
+      camera.position.copy(controls.target).add(off);
+      controls.update();
+    }
+  }, true); // capture: runs before OrbitControls' own key handler
+  canvas.addEventListener('blur', commit);
+  controls.listenToKeyEvents(canvas);
+
   const ray = new THREE.Raycaster();
   // building tools: a click lands on the work plane z = pickZ (snapped to a node within 12 px, else to the 5 cm grid)
   let pick: ((p: V3) => void) | undefined;
