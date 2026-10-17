@@ -10,6 +10,8 @@ import type { View3d } from './render3d';
 import { apply3d, lift } from './physics3d/lift';
 import { add, rotate, type Mechanism3 } from './physics3d/model3';
 import { compile3, moveNode, nodes3 } from './sketch3';
+import { gaussian, scatterStats } from './physics3d/dispersion';
+import { seeded } from './optimize';
 import { initialState3, type Result3 } from './physics3d/solver3';
 import { compile, emptySketch, toSketch } from './sketch';
 import { deleteDesign, download, importFile, listDesigns, loadCurrent, saveCurrent, saveDesign, type Design } from './storage';
@@ -360,6 +362,7 @@ function preview3d(v: View3d) {
 function run() {
   cancelAnimationFrame(raf);
   view3d?.setHandles(undefined);
+  view3d?.setScatter(undefined);
   const m = mechanismOrError();
   if (!m || (isFree() && !editor.validate())) {
     $('stats').innerHTML = $('physics').innerHTML = '';
@@ -394,9 +397,61 @@ function sim3(m3: Mechanism3): Promise<Result3> {
   return new Promise((resolve) => {
     w.onmessage = (e: MessageEvent<Result3>) => ((simBusy = false), resolve(e.data));
     w.onerror = (e) => ((simBusy = false), ($('err').textContent = `Erro no solver 3D: ${e.message}`));
-    w.postMessage({ m3, afterRelease: 1.5 });
+    w.postMessage({ m3, opts: { afterRelease: 1.5 } });
   });
 }
+
+// Many quick 3D shots split over a pool of workers (landing points only); the pool is dropped afterwards.
+function simBatch(m3s: Mechanism3[]): Promise<Result3[]> {
+  const n = Math.min(m3s.length, Math.max(1, (navigator.hardwareConcurrency || 4) - 1));
+  const out: Result3[] = [];
+  let next = 0;
+  return new Promise((resolve) => {
+    let left = m3s.length;
+    for (let k = 0; k < n; k++) {
+      const w = new Worker(new URL('./sim3.worker.ts', import.meta.url), { type: 'module' });
+      const feed = () => {
+        if (next >= m3s.length) return w.terminate();
+        const i = next++;
+        w.onmessage = (e: MessageEvent<Result3>) => ((out[i] = e.data), --left ? feed() : (w.terminate(), resolve(out)));
+        w.postMessage({ m3: m3s[i], opts: { afterRelease: 0, frameEvery: 1e9 } });
+      };
+      feed();
+    }
+  });
+}
+
+// Dispersion: the same machine fired SHOTS times with small random changes; where it lands, and the 1σ/2σ ellipses.
+const SHOTS = 40;
+const JITTER = { releaseDeg: 1, gust: 1.5, pin: 0.01 }; // σ: release timing (°), wind gusts (m/s, both axes), pin play (m)
+$('disp3d').addEventListener('click', async () => {
+  const m = mechanismOrError();
+  if (!m || !view3d) return;
+  view3d.setScatter(undefined);
+  const g = gaussian(seeded(1)); // the same 40 perturbations every time: changes in the result come from the design
+  const e = env3();
+  let m3s: Mechanism3[];
+  try {
+    m3s = Array.from({ length: SHOTS }, () => {
+      const m3 = apply3d(isFree() ? compile3(editor.get()) : lift(m), { ...e, windZ: e.windZ + JITTER.gust * g(), windX: JITTER.gust * g(), pinOffset: e.pinOffset + JITTER.pin * g() });
+      m3.releaseAngle += (JITTER.releaseDeg * g() * Math.PI) / 180;
+      return m3;
+    });
+  } catch (err) {
+    return void ($('err').textContent = (err as Error).message);
+  }
+  const btn = $<HTMLButtonElement>('disp3d');
+  btn.disabled = true;
+  $('node3d').textContent = `Dispersão: ${SHOTS} tiros…`;
+  const rs = await simBatch(m3s);
+  btn.disabled = false;
+  const ok = rs.filter((r) => !r.error && r.release);
+  if (ok.length < 3) return void ($('node3d').textContent = 'Dispersão: tiros demais falharam com essas variações.');
+  const pts = ok.map((r): [number, number] => [r.range, r.lateral]);
+  const s = scatterStats(pts);
+  view3d.setScatter(pts, s);
+  $('node3d').textContent = `Dispersão (${ok.length}/${SHOTS} tiros): alcance ${s.mean[0].toFixed(1)} ± ${s.sd[0].toFixed(1)} m, lateral ${s.mean[1].toFixed(1)} ± ${s.sd[1].toFixed(1)} m; elipse 2σ ${(4 * s.axes[0]).toFixed(1)} × ${(4 * s.axes[1]).toFixed(1)} m.`;
+});
 
 function show(m: Mechanism, r: Result, m3?: Mechanism3, r3?: Result3) {
   if (r.error) $('err').textContent = r.error;

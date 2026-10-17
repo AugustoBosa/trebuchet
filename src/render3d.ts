@@ -6,6 +6,7 @@ import { camRope } from './physics/constraints';
 import { twist } from './physics3d/constraints3';
 import { add, rotate, type BodyRef, type Mechanism3, type V3 } from './physics3d/model3';
 import type { Result3 } from './physics3d/solver3';
+import type { Scatter } from './physics3d/dispersion';
 import type { Bounds } from './render';
 
 const X = new THREE.Vector3(1, 0, 0);
@@ -36,6 +37,8 @@ export function createView3d(canvas: HTMLCanvasElement) {
   const nodeMat = new THREE.MeshBasicMaterial({ depthTest: false, transparent: true, opacity: 0.85 }); // nodes stay visible inside parts
   let built: { m: Mechanism3; r: Result3; group: THREE.Group; update: (q: Float64Array, t: number) => void } | undefined;
   let span0 = 0;
+  const scatterGroup = new THREE.Group(); // landing points + 1σ/2σ ellipses (world frame, on the ground)
+  scene.add(scatterGroup);
 
   // --- node editing: spheres on the design's points, a translate gizmo on the selected one
   const tc = new TransformControls(camera, canvas);
@@ -247,6 +250,31 @@ export function createView3d(canvas: HTMLCanvasElement) {
       }
       const dtF = r.frames.length > 1 ? r.frames[1].t - r.frames[0].t : 1;
       built.update(r.frames[Math.min(r.frames.length - 1, Math.round(t / dtF))].q, t);
+      render();
+    },
+    // landing scatter on the ground (undefined: clear); the camera flies over to it
+    setScatter(pts: [number, number][] | undefined, s?: Scatter) {
+      scatterGroup.children.forEach((o) => (o as THREE.Mesh).geometry.dispose());
+      scatterGroup.clear();
+      if (!pts || !s) return render();
+      const lift = 0.02;
+      const dots = new THREE.Points(
+        new THREE.BufferGeometry().setFromPoints(pts.map(([x, z]) => new THREE.Vector3(x, lift, z))),
+        new THREE.PointsMaterial({ color: css('--accent'), size: 6, sizeAttenuation: false }),
+      );
+      scatterGroup.add(dots);
+      for (const k of [1, 2]) {
+        const ring = Array.from({ length: 65 }, (_, i) => {
+          const t = (i / 64) * 2 * Math.PI, u = k * s.axes[0] * Math.cos(t), v = k * s.axes[1] * Math.sin(t);
+          return new THREE.Vector3(s.mean[0] + u * Math.cos(s.angle) - v * Math.sin(s.angle), lift, s.mean[1] + u * Math.sin(s.angle) + v * Math.cos(s.angle));
+        });
+        scatterGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(ring), k === 1 ? wire.accent : wire.muted));
+      }
+      const c = new THREE.Vector3(s.mean[0], 0, s.mean[1]);
+      const d = Math.max(8, 5 * s.axes[0]);
+      controls.target.copy(c);
+      camera.position.set(c.x - 0.5 * d, 0.9 * d, c.z + 0.6 * d);
+      controls.update();
       render();
     },
     // show draggable nodes (undefined: none, e.g. while a shot plays). Keeps the selection when the list keeps its length.

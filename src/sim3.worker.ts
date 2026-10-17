@@ -2,4 +2,4 @@
 import type { Mechanism3 } from './physics3d/model3';
 import { simulate3 } from './physics3d/solver3';
 
-onmessage = (e: MessageEvent<{ m3: Mechanism3; afterRelease: number }>) => postMessage(simulate3(e.data.m3, { afterRelease: e.data.afterRelease }));
+onmessage = (e: MessageEvent<{ m3: Mechanism3; opts: Parameters<typeof simulate3>[1] }>) => postMessage(simulate3(e.data.m3, e.data.opts));

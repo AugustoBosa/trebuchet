@@ -211,6 +211,7 @@
           <label title="Pino de soltura montado fora da linha central do braço: a funda puxa a pedra de lado e o tiro desvia."><span>Pino fora do centro (cm)</span><input type="number" id="pin" aria-label="Deslocamento lateral do pino de soltura em centímetros" value="0" step="1" min="-50" max="50"></label>
           <label title="Gira a máquina inteira em torno da vertical (positivo = para a esquerda de quem olha o alvo): é como a equipe corrige o vento. O alcance e o desvio são medidos na linha do alvo."><span>Mira (°)</span><input type="number" id="aim" aria-label="Mira, giro da máquina em graus" value="0" step="0.5" min="-15" max="15"></label>
           <button type="button" class="ghost" id="edit3d" title="Volta à pose armada com os nós arrastáveis em 3D">Editar nós</button>
+          <button type="button" class="ghost" id="disp3d" title="Dispara 40 vezes com pequenas variações (soltura ±1°, rajadas de 1,5 m/s, pino ±1 cm) e mostra onde caem, com as elipses de 1σ e 2σ">Dispersão</button>
           <span id="node3d" class="muted" aria-live="polite"></span>
         </span></div>
       <canvas id="machine" role="img" aria-label="Desenho da máquina e animação do disparo" height="440"></canvas>
