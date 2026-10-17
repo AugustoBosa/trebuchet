@@ -18,7 +18,7 @@ Simulador de trebuchets (Vite + TypeScript). Rodar: `npm run dev` · testes: `np
 
 ### 3D (branch `feat/3d`)
 1. **Merge com `main`.** A outra sessão mexe em `main.ts`, `editor.ts`, `sketch.ts` e `solver.ts`. Se ela trouxer uma junta nova (ex.: `ledge`), ela precisa de uma versão em `src/physics3d/constraints3.ts` e em `lift.ts`, e de um caso no teste de paridade.
-2. **Editar nós 3D nos tipos com geometria própria** (walking, MURLIN, roda, F2K): hoje eles só têm o nó do pino, porque não têm alças 2D.
+2. **Walking arm sem alças de geometria** no 2D nem no 3D (ele é desenhado já inclinado pelo empurrão de disparo): em 3D só tem o nó do pino.
 3. **O solver 3D roda na thread da página** (0,1–0,5 s por tiro; o walking arm com 1,5 s após a soltura chega perto de 1 s). Movê-lo para o worker se travar a interface.
 4. **Eixos de articulação sempre em z.** Um eixo inclinado (máquina torta de propósito) exigiria editar `axis` no esboço.
 
