@@ -306,8 +306,6 @@ $('info-btn').addEventListener('click', () => $<HTMLDialogElement>('info-dlg').s
 $('to-free').addEventListener('click', () => {
   const m = mechanismOrError();
   if (!m) return;
-  // ponytail: no drum/roller/landing-spike tools in the free editor yet; add them if people want to sketch these kinds
-  if (m.springs?.length || m.joints.some((j) => j.kind === 'cam' || j.kind === 'roller' || j.kind === 'spike')) return void ($('err').textContent = 'O editor livre ainda não tem as ferramentas de tambor, rolete, mola e espinhos que cravam ao cair: este tipo não pode ser aberto nele.');
   editor.set(toSketch(m, { troughMu: params.troughMu }));
   kindSel.value = 'free';
   buildForm();

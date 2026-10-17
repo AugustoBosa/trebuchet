@@ -166,6 +166,10 @@ export function accelerations(m: Mechanism, s: State, active: boolean[], fric: n
 // Unilateral joints and their sign σ: active while σλ ≥ 0, open while σC > 0.
 // Floor/stop push (λ ≥ 0, open when C > 0); a rope only pulls (λ ≤ 0) and goes slack when shorter than its length.
 const contactSign = (j: Mechanism['joints'][number]) => (j.kind === 'floor' || j.kind === 'stop' || j.kind === 'foot' || j.kind === 'roller' ? 1 : j.kind === 'rope' || j.kind === 'cam' ? -1 : 0);
+// Joints in force at the start: contacts that start open (a stone hanging above its trough, wheels above their
+// track) and spikes still in the air don't hold anything yet.
+export const startsActive = (m: Mechanism, s: State) =>
+  m.joints.map((j) => j.kind !== 'spike' && !(contactSign(j) * jointRows(s, j, m.bodies.length)[normalRow(j)].C > 1e-6));
 // which row carries the normal force (a foot's first row is the no-slip grip)
 const normalRow = (j: Mechanism['joints'][number]) => (j.kind === 'foot' ? 1 : 0);
 
@@ -298,8 +302,7 @@ export function simulate(
   let s = initialState(m);
   // spikes become feet where they land: work on a copy of the joint list so the caller's mechanism stays reusable
   if (m.joints.some((j) => j.kind === 'spike' || j.kind === 'foot')) m = { ...m, joints: [...m.joints] };
-  // contacts that start open (e.g. a stone hanging above its trough) begin inactive
-  const active = m.joints.map((j) => j.kind !== 'spike' && !(contactSign(j) * jointRows(s, j, m.bodies.length)[normalRow(j)].C > 1e-6));
+  const active = startsActive(m, s);
   let fric: number[] = [];
   const e0 = energy(m, s);
   const y0p = s.q[P + 1];

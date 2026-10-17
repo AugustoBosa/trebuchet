@@ -2,9 +2,9 @@
 import { css, cssHeight, fitCanvas } from './charts';
 import type { Vec } from './physics/model';
 import { painter, view, type Bounds, type View } from './render';
-import { allPoints, analyze, attachments, compile, detachedJoints, removeBody, segDist, type Role, type SBody, type Sketch } from './sketch';
+import { allPoints, analyze, attachments, compile, detachedJoints, removeBody, segDist, type Role, type SBody, type SJoint, type Sketch } from './sketch';
 
-export type Tool = 'select' | 'rod' | 'disk' | 'projectile' | 'cw' | 'pin' | 'weld' | 'rope' | 'hslider' | 'vslider' | 'pull' | 'foot';
+export type Tool = 'select' | 'rod' | 'disk' | 'projectile' | 'cw' | 'pin' | 'weld' | 'rope' | 'hslider' | 'vslider' | 'pull' | 'foot' | 'spike' | 'roller' | 'floor' | 'spring' | 'cam';
 export const TOOLS: [Tool, string, string][] = [
   ['select', 'Selecionar', 'Clique para selecionar; arraste pontos (pontos coincidentes andam juntos). Del apaga, Ctrl+Z desfaz.'],
   ['rod', 'Barra', 'Arraste de uma ponta à outra para criar uma barra (braço, haste).'],
@@ -18,6 +18,11 @@ export const TOOLS: [Tool, string, string][] = [
   ['vslider', 'Trilho │', 'Clique num ponto de um corpo: ele passa a correr numa guia vertical.'],
   ['foot', 'Pé', 'Clique na ponta de um corpo encostada no chão: ela fica presa por espinhos (não escorrega), mas pode descolar se for puxada para cima.'],
   ['pull', 'Equipe', 'Clique num ponto de um corpo: uma equipe puxa uma corda dali para baixo (tração humana). Ajuste força e curso no painel.'],
+  ['spike', 'Espetos', 'Clique num ponto de um corpo, no ar: onde ele tocar o chão, os espetos cravam (não escorrega, pode descolar). É a perna do walking arm.'],
+  ['roller', 'Rolete', 'Clique sobre uma barra: um rolete fixo passa a apoiá-la por baixo. Ela desliza sobre ele e pode levantar (F2K).'],
+  ['floor', 'Chão', 'Clique num ponto de um corpo: ele não desce abaixo de uma altura (padrão: o chão). Para rodas que pousam num trilho, ajuste a altura no painel.'],
+  ['spring', 'Mola', 'Arraste de um ponto de um corpo até a âncora fixa. A mola puxa k·(esticado − livre) enquanto esticada. Ajuste k e o comprimento livre no painel.'],
+  ['cam', 'Tambor', 'Clique sobre a barra no centro do tambor (o eixo do braço): a corda do contrapeso se desenrola dele em espiral, do raio inicial ao final (MURLIN, roda). Precisa de um contrapeso.'],
 ];
 
 export const FREE_BOUNDS: Bounds = { x0: -10, x1: 10, y0: -0.5, y1: 12 };
@@ -93,6 +98,17 @@ export function createEditor(o: {
     sk.joints.forEach((j, i) => {
       const c = isSel('joint', i) ? accent : muted;
       if (j.kind === 'rope') line(j.pa, j.pb, isSel('joint', i) ? accent : ink, 1.5, [5, 4]);
+      if (j.kind === 'spring') line(j.at, j.anchor, c, 2, [2, 3]);
+      if (j.kind === 'floor') line([j.at[0] - 0.4, j.y], [j.at[0] + 0.4, j.y], c, 3, [6, 4]);
+      if (j.kind === 'cam') {
+        const cw = sk.bodies[j.a];
+        const hang: Vec = cw.kind === 'disk' ? cw.c : [(cw.a[0] + cw.b[0]) / 2, (cw.a[1] + cw.b[1]) / 2];
+        g.strokeStyle = c; g.lineWidth = 2;
+        g.beginPath(); g.arc(...v.P(j.at), j.r0 * v.s, 0, 2 * Math.PI); g.stroke();
+        const side: Vec = [j.at[0] - j.r0, j.at[1]];
+        if (j.over) (line(side, j.over, ink, 1.5), line(j.over, [hang[0], j.over[1]], ink, 1.5), line([hang[0], j.over[1]], hang, ink, 1.5));
+        else line(side, hang, ink, 1.5);
+      }
       if (j.kind === 'slider') {
         const k = 30 / Math.hypot(...j.dir);
         line([j.at[0] - k * j.dir[0], j.at[1] - k * j.dir[1]], [j.at[0] + k * j.dir[0], j.at[1] + k * j.dir[1]], c, 2, [8, 6]);
@@ -122,7 +138,7 @@ export function createEditor(o: {
         line([j.at[0] - 0.15, Math.max(0, j.at[1] - j.stroke)], [j.at[0] + 0.15, Math.max(0, j.at[1] - j.stroke)], css('--accent'), 2);
         return;
       }
-      if (j.kind === 'rope' || j.kind === 'slider') return;
+      if (j.kind === 'rope' || j.kind === 'slider' || j.kind === 'floor') return;
       const [x, y] = v.P(j.at);
       g.strokeStyle = isSel('joint', i) ? accent : ink;
       g.fillStyle = css('--bg');
@@ -131,6 +147,16 @@ export function createEditor(o: {
         for (const dx of [-6, 0, 6]) { g.beginPath(); g.moveTo(x + dx - 3, y); g.lineTo(x + dx, y + 7); g.lineTo(x + dx + 3, y); g.stroke(); }
         return;
       }
+      if (j.kind === 'spike') { // spikes in the air, pointing down
+        for (const dx of [-6, 0, 6]) { g.beginPath(); g.moveTo(x + dx - 3, y); g.lineTo(x + dx, y + 7); g.lineTo(x + dx + 3, y); g.stroke(); }
+        return;
+      }
+      if (j.kind === 'roller') { // fixed roller on a post
+        line([j.at[0], 0], j.at, muted, 3);
+        g.beginPath(); g.arc(x, y + 6, 6, 0, 2 * Math.PI); g.fill(); g.stroke();
+        return;
+      }
+      if (j.kind === 'spring' || j.kind === 'cam') { g.beginPath(); g.arc(x, y, 4, 0, 2 * Math.PI); g.fill(); g.stroke(); return; }
       if (j.kind === 'stop') { // resting contact: small wedge
         g.beginPath(); g.moveTo(x - 6, y + 4); g.lineTo(x + 6, y + 4); g.lineTo(x, y - 5); g.closePath(); g.fill(); g.stroke();
         return;
@@ -142,7 +168,7 @@ export function createEditor(o: {
         line(j.at, [j.at[0] + j.at[1] * 0.5, 0], muted, 3);
       }
     });
-    if (drag && (tool === 'rod' || tool === 'rope')) line(drag.from, drag.to, accent, tool === 'rod' ? 6 : 1.5, tool === 'rope' ? [5, 4] : []);
+    if (drag && (tool === 'rod' || tool === 'rope' || tool === 'spring')) line(drag.from, drag.to, accent, tool === 'rod' ? 6 : 1.5, tool === 'rod' ? [] : tool === 'rope' ? [5, 4] : [2, 3]);
   }
 
   // Joint points on bodies whose handle is moving (e.g. the axle in the middle of an arm whose tip is dragged).
@@ -191,7 +217,7 @@ export function createEditor(o: {
       draw(); renderPanel();
       return;
     }
-    if (tool === 'rod' || tool === 'rope') { drag = { from: s, to: s }; return; }
+    if (tool === 'rod' || tool === 'rope' || tool === 'spring') { drag = { from: s, to: s }; return; }
 
     snapshot();
     const hits = bodiesAt(s);
@@ -214,6 +240,29 @@ export function createEditor(o: {
     } else if (tool === 'foot') {
       if (!hits.length || s[1] > 0.05) { undo.pop(); o.status.textContent = 'O pé precisa ficar sobre um corpo, rente ao chão (até 5 cm).'; return; }
       sk.joints.push({ kind: 'foot', a: hits.at(-1)!, at: [s[0], 0] });
+      sel = { type: 'joint', i: sk.joints.length - 1 };
+    } else if (tool === 'spike' || tool === 'floor') {
+      if (!hits.length) { undo.pop(); o.status.textContent = 'Clique sobre um corpo.'; return; }
+      const a = hits.at(-1)!;
+      const b = sk.bodies[a];
+      if (tool === 'floor' && b.kind === 'disk' && b.role === 'projectile') { undo.pop(); o.status.textContent = 'O projétil já tem a calha (o chão sob ele).'; return; }
+      // a disk is held at its center, its rim resting on the ground; any other point simply can't go below ground
+      if (tool === 'floor') sk.joints.push(b.kind === 'disk' ? { kind: 'floor', a, at: [b.c[0], b.c[1]], y: b.r } : { kind: 'floor', a, at: s, y: 0 });
+      else sk.joints.push({ kind: 'spike', a, at: s });
+      sel = { type: 'joint', i: sk.joints.length - 1 };
+    } else if (tool === 'roller' || tool === 'cam') {
+      const a = hits.filter((i) => sk.bodies[i].kind === 'rod').at(-1);
+      const cw = sk.bodies.findIndex((b) => b.kind === 'disk' && b.role === 'counterweight');
+      if (a === undefined || (tool === 'cam' && cw < 0)) { undo.pop(); o.status.textContent = a === undefined ? 'Clique sobre uma barra.' : 'Crie antes o contrapeso: é ele que pende da corda do tambor.'; return; }
+      if (tool === 'roller') sk.joints.push({ kind: 'roller', a, at: s });
+      else {
+        const c = sk.bodies[cw] as Extract<SBody, { kind: 'disk' }>;
+        // spiral sized so the rope runs out as the counterweight reaches the ground (same rule as the presets)
+        sk.joints.push({ kind: 'cam', a: cw, b: a, at: s, r0: 0.8, r1: 0.2, span: Math.max(0.1, (2 * (c.c[1] - c.r)) / (0.8 + 0.2)) });
+        // past the spiral's end the rope keeps paying out: the counterweight must land on the ground, as in the presets
+        if (!sk.joints.some((j) => j.kind === 'floor' && j.a === cw)) sk.joints.push({ kind: 'floor', a: cw, at: [c.c[0], c.c[1]], y: c.r });
+        // ponytail: the drum unwinds as the arm turns clockwise (the presets' direction); a mirrored machine winds it up instead
+      }
       sel = { type: 'joint', i: sk.joints.length - 1 };
     } else if (tool === 'pull') {
       if (!hits.length) { undo.pop(); o.status.textContent = 'Clique sobre um corpo para prender a corda da equipe.'; return; }
@@ -254,6 +303,11 @@ export function createEditor(o: {
     if (tool === 'rod') {
       sk.bodies.push({ kind: 'rod', name: `barra ${sk.bodies.filter((b) => b.kind === 'rod').length + 1}`, a: from, b: to, mass: Math.round(12 * d2(from, to)) });
       sel = { type: 'body', i: sk.bodies.length - 1 };
+    } else if (tool === 'spring') {
+      const a = bodiesAt(from).at(-1);
+      if (a === undefined) { undo.pop(); o.status.textContent = 'Comece a mola sobre um corpo e termine na âncora fixa.'; return draw(); }
+      sk.joints.push({ kind: 'spring', a, at: from, anchor: to, k: 7000, rest: +(0.5 * d2(from, to)).toFixed(2) });
+      sel = { type: 'joint', i: sk.joints.length - 1 };
     } else {
       const a = bodiesAt(from).at(-1) ?? 'ground';
       const b = bodiesAt(to).at(-1) ?? 'ground';
@@ -334,12 +388,19 @@ export function createEditor(o: {
         ${[['', 'nenhum'], ['projectile', 'projétil'], ['counterweight', 'contrapeso']].map(([v, l]) => `<option value="${v}" ${(b.role ?? '') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>`;
     } else if (sel?.type === 'joint') {
       const j = sk.joints[sel.i];
-      const names: Record<string, string> = { pin: 'Pino', weld: 'Solda', rope: 'Corda', slider: 'Trilho', pull: 'Equipe (tração)', stop: 'Apoio (pode descolar)', foot: 'Pé com espinhos (não escorrega, pode descolar)' };
+      const names: Record<SJoint['kind'], string> = { pin: 'Pino', weld: 'Solda', rope: 'Corda', slider: 'Trilho', pull: 'Equipe (tração)', stop: 'Apoio (pode descolar)', foot: 'Pé com espinhos (não escorrega, pode descolar)',
+        spike: 'Espetos no ar (cravam onde tocarem o chão)', roller: 'Rolete fixo (a barra desliza sobre ele)', floor: 'Chão sob este ponto', spring: 'Mola até uma âncora fixa', cam: 'Tambor em espiral (corda do contrapeso)' };
       html += `<p><b>${names[j.kind]}</b>${'b' in j && j.b === 'ground' ? ' (preso ao chão)' : ''}</p>`;
       if (j.kind === 'pin') html += field('Atrito μ', 'mu', j.mu ?? 0) + field('Raio do eixo (m)', 'radius', j.radius ?? 0.05);
       if (j.kind === 'pull') html += field('Força da equipe (N)', 'force', j.force) + field('Curso do puxão (m)', 'stroke', j.stroke) +
         `<p class="muted">Uma pessoa puxa ~200–300 N num puxão curto. Energia = força × curso = ${((j.force * j.stroke) / 1000).toFixed(1)} kJ.</p>`;
       if (j.kind === 'rope') html += `<p class="muted">Comprimento: ${d2(j.pa, j.pb).toFixed(2)} m</p>`;
+      if (j.kind === 'floor') html += field('Altura do chão (m)', 'y', j.y);
+      if (j.kind === 'spring') html += field('Rigidez k (N/m)', 'k', j.k) + field('Comprimento livre (m)', 'rest', j.rest) +
+        `<p class="muted">Agora: ${d2(j.at, j.anchor).toFixed(2)} m. Energia armazenada: ${((0.5 * j.k * Math.max(0, d2(j.at, j.anchor) - j.rest) ** 2) / 1000).toFixed(2)} kJ.</p>`;
+      if (j.kind === 'cam') html += field('Raio inicial (m)', 'r0', j.r0) + field('Raio final (m)', 'r1', j.r1) + field('Giro da espiral (rad)', 'span', j.span) +
+        field('Altura da polia (m, 0 = sem)', 'over', j.over?.[1] ?? 0) +
+        `<p class="muted">A corda desenrola ${((j.span * (j.r0 + j.r1)) / 2).toFixed(2)} m até o raio final.</p>`;
     }
     if (sel) html += `<button type="button" class="ghost" data-act="delete">Apagar seleção</button>`;
     html += `<h2>Disparo</h2>` + field('Ângulo de liberação (°)', 'g.releaseDeg', sk.releaseDeg) + field('Densidade do ar', 'g.airDensity', sk.airDensity) +
@@ -367,6 +428,15 @@ export function createEditor(o: {
       const j = sk.joints[sel.i];
       if (j.kind === 'pin' && Number.isFinite(num) && num >= 0) j[k as 'mu' | 'radius'] = num;
       if (j.kind === 'pull' && Number.isFinite(num) && num > 0) j[k as 'force' | 'stroke'] = num;
+      if (j.kind === 'floor' && Number.isFinite(num)) j.y = num;
+      if (j.kind === 'spring' && Number.isFinite(num) && num > 0) j[k as 'k' | 'rest'] = num;
+      if (j.kind === 'cam' && Number.isFinite(num)) {
+        if (k === 'over') { if (num > j.at[1]) j.over = [j.at[0] - j.r0, num]; else delete j.over; } // pulley above the drum, over its back side
+        else if (num > 0) {
+          j[k as 'r0' | 'r1' | 'span'] = num;
+          if (k === 'r0' && j.over) j.over = [j.at[0] - j.r0, j.over[1]];
+        }
+      }
     }
     changed();
   });
