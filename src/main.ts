@@ -10,7 +10,7 @@ import type { View3d } from './render3d';
 import { apply3d, lift } from './physics3d/lift';
 import { add, rotate, type Mechanism3 } from './physics3d/model3';
 import { compile3, moveNode, nodes3 } from './sketch3';
-import { initialState3, simulate3, type Result3 } from './physics3d/solver3';
+import { initialState3, type Result3 } from './physics3d/solver3';
 import { compile, emptySketch, toSketch } from './sketch';
 import { deleteDesign, download, importFile, listDesigns, loadCurrent, saveCurrent, saveDesign, type Design } from './storage';
 
@@ -367,9 +367,38 @@ function run() {
     return;
   }
   saveCurrent(design());
-  const m3 = is3d() ? mechanism3(m) : undefined;
-  const r3 = m3 && simulate3(m3, { afterRelease: 1.5 });
-  const r = r3 ? planar(r3) : simulate(m, { afterRelease: 1.5 });
+  const id = ++runId;
+  if (!is3d()) return show(m, simulate(m, { afterRelease: 1.5 }));
+  let m3: Mechanism3;
+  try {
+    m3 = mechanism3(m);
+  } catch (e) {
+    return void ($('err').textContent = (e as Error).message);
+  }
+  $('node3d').textContent = 'Simulando em 3D…';
+  sim3(m3).then((r3) => {
+    if (id !== runId) return; // a newer shot was asked for meanwhile
+    $('node3d').textContent = '';
+    show(m, planar(r3), m3, r3);
+  });
+}
+
+// One 3D shot at a time in a worker; asking for another while one runs drops the old one (its worker is terminated).
+let runId = 0;
+let simWorker: Worker | undefined;
+let simBusy = false;
+function sim3(m3: Mechanism3): Promise<Result3> {
+  if (simBusy) simWorker?.terminate(), (simWorker = undefined);
+  const w = (simWorker ??= new Worker(new URL('./sim3.worker.ts', import.meta.url), { type: 'module' }));
+  simBusy = true;
+  return new Promise((resolve) => {
+    w.onmessage = (e: MessageEvent<Result3>) => ((simBusy = false), resolve(e.data));
+    w.onerror = (e) => ((simBusy = false), ($('err').textContent = `Erro no solver 3D: ${e.message}`));
+    w.postMessage({ m3, afterRelease: 1.5 });
+  });
+}
+
+function show(m: Mechanism, r: Result, m3?: Mechanism3, r3?: Result3) {
   if (r.error) $('err').textContent = r.error;
   stats(r, m, r3?.lateral);
   physicsPanel(r, m);
