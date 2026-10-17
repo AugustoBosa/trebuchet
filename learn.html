@@ -345,6 +345,36 @@ m L_s^2\,\ddot\psi + m L_1 L_s\,(c\,\ddot\theta - s\,\dot\theta^2) &= -m g L_s\c
       <div class="models" id="models"></div>
     </section>
 
+    <section class="sec" id="tresd">
+      <h2>10. Em três dimensões</h2>
+      <div class="txt">
+        <p>Um trebuchet simétrico não tem nenhuma força fora do seu plano, e por isso um modelo plano basta para ele. O laboratório tem também um solver 3D (botão <b>Vista 3D</b>), escrito como generalização exata do plano. Rodado nos 13 tipos, ele reproduz o solver 2D com diferença de ~10⁻¹² no alcance, na eficiência, na força no eixo e na flexão do braço, e o desvio lateral sai exatamente zero.</p>
+        <p>Em 3D, cada corpo ganha seis graus de liberdade. A orientação é um quatérnion, a inércia passa a ser um tensor no referencial do mundo, <span class="itex">I_w = R\,I\,R^\top</span>, e aparece o termo giroscópico:</p>
+        <div class="tex">I_w\,\dot{\boldsymbol\omega} = \boldsymbol\tau - \boldsymbol\omega\times(I_w\,\boldsymbol\omega).</div>
+        <p>Uma articulação vira cinco restrições: três prendem o ponto e duas mantêm os eixos alinhados. As juntas "planas" (batente, solda, tambor) medem a torção em torno do eixo da articulação. Além da comparação com o 2D, o solver passa por testes de física pura:</p>
+        <ul>
+          <li>o pêndulo cônico, que mantém a altura constante e tem período <span class="itex">2\pi\sqrt{L\cos\alpha/g}</span>;</li>
+          <li>o corpo livre girando perto do eixo intermediário, que conserva o momento angular e a energia em 10⁻⁶ e mesmo assim vira de ponta-cabeça (efeito Dzhanibekov).</li>
+        </ul>
+        <p>O que tira o tiro do plano:</p>
+        <ul>
+          <li><b>vento cruzado</b>: o arrasto age sobre a velocidade relativa ao ar, <span class="itex">\mathbf v - \mathbf w</span>;</li>
+          <li><b>pino de soltura fora do centro</b>: a funda puxa a pedra de lado;</li>
+          <li><b>eixo torto</b>: o braço gira num plano inclinado.</li>
+        </ul>
+        <p>A correção de verdade é a <b>mira</b>, girar a máquina inteira. No gráfico (eixo horizontal: vento cruzado), um trebuchet articulado de 225 m desvia cerca de 0,8 m por m/s de vento; o pino a 25 cm desloca a curva inteira ~1,6 m, e 1° de mira, ~3,9 m (225 m × sen 1°).</p>
+        <p><b>Dispersão.</b> Nenhum tiro sai igual: a soltura varia um pouco, o vento dá rajadas, o pino tem folga. O botão <b>Dispersão</b> repete o disparo 40 vezes com essas variações e desenha onde caem, com as elipses de 1σ e 2σ. Num espalhamento gaussiano no plano, elas contêm cerca de 39% e 86% dos tiros.</p>
+        <p><b>Flexão no braço.</b> Para quem constrói, a peça crítica costuma ser o braço. Corte o braço numa seção qualquer: o momento fletor ali é o momento, em relação ao corte, de tudo o que está do outro lado. Isso inclui as reações das juntas (calculadas pelo solver), o peso do próprio braço e a sua inércia (princípio de d'Alembert):</p>
+        <div class="tex">M(x_s) = \sum_{x_j > x_s} (\mathbf p_j - \mathbf p_s)\times\mathbf F_j + \mu\!\int_{x_s}^{L/2}\!(x - x_s)\,\hat{\mathbf e}\times(\mathbf g - \mathbf a(x))\,dx.</div>
+        <p>O laboratório mostra o pico até a soltura e onde ele ocorre, quase sempre no eixo. Com o momento <span class="itex">M</span> e o módulo de resistência da seção (<span class="itex">W = b h^2/6</span> numa viga retangular), a tensão é <span class="itex">\sigma = M/W</span>.</p>
+      </div>
+      <figure class="fig">
+        <div class="panel"><canvas id="drift" height="260" role="img" aria-label="Desvio lateral do contrapeso articulado em função do vento cruzado, sem correção, com pino fora do centro e com mira"></canvas>
+        <p class="out" id="drift-out" role="status">Calculando 27 tiros em 3D…</p></div>
+        <figcaption>Contrapeso articulado padrão, solver 3D. Positivo: vento e desvio para a esquerda de quem olha o alvo.</figcaption>
+      </figure>
+    </section>
+
     <section class="sec" id="referencias">
       <h2>Referências</h2>
       <div class="full">

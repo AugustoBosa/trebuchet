@@ -8,6 +8,8 @@ import { simulate } from './physics/solver';
 import { evaluate, FAST_DT, linspace } from './optimize';
 import { build, defaults, defaultsFor, KINDS, type Kind, type Params } from './presets';
 import { drawMachine, view } from './render';
+import { apply3d, lift } from './physics3d/lift';
+import { simulate3 } from './physics3d/solver3';
 
 // equations: .tex = display, .itex = inline; source is the element's text
 document.querySelectorAll<HTMLElement>('.tex, .itex').forEach((el) =>
@@ -172,6 +174,44 @@ const spy = new IntersectionObserver((es) => es.forEach((e) => {
   tocLinks.get(e.target.id)?.setAttribute('aria-current', 'true');
 }), { rootMargin: '0px 0px -70% 0px' });
 [...secs, ...document.querySelectorAll('.model')].forEach((el) => spy.observe(el));
+
+// --- crosswind drift in 3D (section 10): no correction, release pin 25 cm off center, machine aimed 1°
+{
+  const cv = $<HTMLCanvasElement>('drift');
+  lazy(cv, async () => {
+    const winds = linspace(-8, 8, 9);
+    const m = lift(build('hinged', defaultsFor('hinged')));
+    // one shot at a time, yielding between them: 27 3D shots would otherwise freeze the page for seconds
+    const drift = async (env: { pinOffset: number; aimDeg: number }) => {
+      const out: number[] = [];
+      for (const w of winds) {
+        out.push(simulate3(apply3d(m, { windZ: w, ...env }), { afterRelease: 0, frameEvery: 1e9, dt: FAST_DT }).lateral);
+        await new Promise((r) => setTimeout(r));
+      }
+      return out;
+    };
+    const spec: ChartSpec = { title: 'Desvio lateral', unit: 'm', t: winds, xUnit: 'm/s', series: [
+      { label: 'sem correção', color: '', values: await drift({ pinOffset: 0, aimDeg: 0 }) },
+      { label: 'pino a 25 cm', color: '', values: await drift({ pinOffset: 0.25, aimDeg: 0 }) },
+      { label: 'mira 1°', color: '', values: await drift({ pinOffset: 0, aimDeg: 1 }) },
+    ] };
+    const draw = (x?: number) => {
+      spec.series.forEach((s, i) => (s.color = css(`--series-${i + 1}`)));
+      drawChart(cv, spec, x === undefined ? undefined : timeAt(cv, spec, x));
+    };
+    redraws.push(draw);
+    draw();
+    const slope = (spec.series[0].values.at(-1)! - spec.series[0].values[0]) / (winds.at(-1)! - winds[0]);
+    $('drift-out').textContent = `Sem correção: ${slope.toFixed(2)} m de desvio por m/s de vento. Passe o mouse para ler os valores.`;
+    cv.addEventListener('mousemove', (e) => {
+      draw(e.clientX);
+      const t = timeAt(cv, spec, e.clientX);
+      const i = Math.round(((t - winds[0]) / (winds.at(-1)! - winds[0])) * (winds.length - 1));
+      $('drift-out').textContent = `Vento ${winds[i].toFixed(0)} m/s: ${spec.series.map((s) => `${s.label} ${s.values[i].toFixed(1)} m`).join(' · ')}`;
+    });
+    cv.addEventListener('mouseleave', () => draw());
+  });
+}
 
 // --- timeline (section 1)
 const EVENTS = [
