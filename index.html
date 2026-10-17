@@ -128,7 +128,7 @@
         <fieldset id="opt">
           <legend>Otimizar</legend>
           <div class="row"><button type="button" class="ghost" id="opt-help-btn" aria-haspopup="dialog">ⓘ Como usar</button></div>
-          <label>Objetivo<select id="objective"><option value="range">Alcance</option><option value="efficiency">Eficiência</option></select></label>
+          <label>Objetivo<select id="objective"><option value="range">Alcance</option><option value="efficiency">Eficiência</option><option value="lateral">Desvio lateral mínimo (3D)</option><option value="robust">Alcance robusto (3D)</option></select></label>
           <p class="muted">Variáveis livres para o otimizador:</p>
           <div id="opt-vars"></div>
           <div id="opt-arm-box">
@@ -153,7 +153,11 @@
             <h3>Passo a passo</h3>
             <ol>
               <li><b>Monte o design base.</b> Escolha o tipo de trebuchet e ajuste os controles do jeito que quer partir. Ele é o ponto de comparação ("atual") e fixa todas as variáveis não marcadas.</li>
-              <li><b>Escolha o objetivo.</b> <i>Alcance</i> maximiza a distância em metros. <i>Eficiência</i> maximiza o percentual da energia de entrada que o projétil leva na soltura. Os dois podem pedir designs diferentes.</li>
+              <li><b>Escolha o objetivo.</b> <i>Alcance</i> maximiza a distância em metros. <i>Eficiência</i> maximiza o percentual da energia de entrada que o projétil leva na soltura. Os dois podem pedir designs diferentes.
+                <ul>
+                  <li>Com a <b>Vista 3D</b> ligada, tudo roda no motor 3D, com o vento lateral e o pino que você definiu, e aparecem dois objetivos a mais. <i>Desvio lateral mínimo</i> procura o design que cai na linha do alvo. Marque a variável <i>Pino fora do centro</i> e ele acha o deslocamento do pino que compensa o vento (cada 10 cm de pino desvia cerca de 0,7 m num trebuchet de 5 m).</li>
+                  <li><i>Alcance robusto</i> é a média menos o desvio-padrão do alcance em 5 tiros: o nominal, a soltura ±2° (a dispersão do pino) e uma rajada de ±3 m/s a favor ou contra. Ele prefere designs que perdem pouco quando algo varia. Cada avaliação custa 5 simulações, por isso é mais lento.</li>
+                </ul></li>
               <li><b>Marque as variáveis livres.</b> Por padrão são a funda e o ângulo de liberação. Quanto mais variáveis, mais simulações e mais chance de a busca parar em ótimos locais. Comece com 2 ou 3 e vá acrescentando. Densidade do ar, atrito e arrasto não aparecem: são condições do ambiente, não escolhas de projeto.</li>
               <li><b>(Opcional) Fixe o comprimento total do braço.</b> Marque <i>Distribuir o braço entre longo e curto</i> e informe o <i>Comprimento total do braço</i>, a soma braço longo + braço curto, como se você tivesse uma viga desse tamanho para cortar. O otimizador passa a variar o tamanho dos dois braços ao mesmo tempo, sempre com <b>longo + curto = total</b>, e procura a melhor posição do eixo. Os braços longo e curto deixam de ser variáveis separadas (as caixas ficam desativadas).
                 <ul>

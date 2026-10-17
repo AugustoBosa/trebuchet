@@ -37,6 +37,8 @@ const optimizer = mountOptimizer({
   kind: () => kindSel.value as Kind,
   params,
   apply: (p) => (Object.assign(params, p), syncForm(), run()), // run() re-simulates at full accuracy
+  env3: () => (is3d() ? { windZ: +$<HTMLInputElement>('wind').value || 0, pinOffset: (+$<HTMLInputElement>('pin').value || 0) / 100 } : undefined),
+  applyPin: (m) => ($<HTMLInputElement>('pin').value = String(Math.round(m * 100))),
 });
 
 function buildForm() {
@@ -180,6 +182,7 @@ $('view3d').addEventListener('click', async (e) => {
   btn.setAttribute('aria-pressed', String(on));
   machine.hidden = on;
   machine3d.hidden = $('opts3d').hidden = !on;
+  if (!isFree()) optimizer.refresh(); // the 3D pin becomes (or stops being) an optimization variable
   if (current && machine.dataset.mode === 'play') run(); // re-simulate with the other solver
   else preview();
 });

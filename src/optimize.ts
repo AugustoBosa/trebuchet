@@ -1,24 +1,57 @@
 import { RANGES } from './labels';
 import { simulate } from './physics/solver';
+import { apply3d, lift } from './physics3d/lift';
+import { simulate3 } from './physics3d/solver3';
 import { build, type Kind, type Params } from './presets';
 
-export type Objective = 'range' | 'efficiency';
+// 'lateral' and 'robust' need the 3D solver (env3 given)
+export type Objective = 'range' | 'efficiency' | 'lateral' | 'robust';
 export const FAST_DT = 2e-3; // ≤0.012% off the 1e-4 reference (release is interpolated), 4× cheaper than 5e-4; applied results are re-run at full accuracy
 
-export function evaluate(kind: Kind, p: Params, objective: Objective): number {
+// 3D conditions of the shot; pinOffset can also be an optimization variable (then it rides in the params)
+export interface Env3 { windZ: number; pinOffset: number }
+export type OptParams = Params & { pinOffset?: number };
+const PIN_RANGE: [number, number] = [-0.5, 0.5]; // m, same limits as the 3D field (±50 cm)
+// robust range: release ±2° (the pin's timing scatter) and a ±3 m/s tail/head gust around the nominal shot
+const SCENARIOS = [{ dDeg: 0, windX: 0 }, { dDeg: 2, windX: 0 }, { dDeg: -2, windX: 0 }, { dDeg: 0, windX: 3 }, { dDeg: 0, windX: -3 }];
+
+// Score to MAXIMIZE, 0 = failed shot. lateral → 1/(1+|drift|), best = 1; shownValue() turns it back into meters.
+export function evaluate(kind: Kind, p: OptParams, objective: Objective, env3?: Env3): number {
   try {
     // tMax 4 s: designs that never release would otherwise burn 8 s of simulation each
-    const r = simulate(build(kind, p), { afterRelease: 0, frameEvery: 1e9, dt: FAST_DT, tMax: 4 });
+    const opts = { afterRelease: 0, frameEvery: 1e9, dt: FAST_DT, tMax: 4 };
+    if (!env3) {
+      if (objective === 'lateral' || objective === 'robust') return 0;
+      const r = simulate(build(kind, p), opts);
+      if (r.error) return 0;
+      return objective === 'range' ? r.range : r.efficiency;
+    }
+    const shot = (dDeg = 0, windX = 0) =>
+      simulate3(apply3d(lift(build(kind, { ...p, releaseDeg: p.releaseDeg + dDeg })), { windZ: env3.windZ, windX, pinOffset: p.pinOffset ?? env3.pinOffset }), opts);
+    if (objective === 'robust') {
+      const rs = SCENARIOS.map((sc) => shot(sc.dDeg, sc.windX));
+      if (rs.some((r) => r.error)) return 0;
+      const mean = rs.reduce((a, r) => a + r.range, 0) / rs.length;
+      const sd = Math.sqrt(rs.reduce((a, r) => a + (r.range - mean) ** 2, 0) / rs.length);
+      return Math.max(0, mean - sd);
+    }
+    const r = shot();
     if (r.error) return 0;
-    return objective === 'range' ? r.range : r.efficiency;
+    return objective === 'range' ? r.range : objective === 'efficiency' ? r.efficiency : 1 / (1 + Math.abs(r.lateral));
   } catch {
     return 0; // impossible geometry scores zero
   }
 }
 
+export const shotsPerEval = (o: Objective) => (o === 'robust' ? SCENARIOS.length : 1);
+
+// score → what the user reads: m, %, or the lateral drift in m
+export const shownValue = (objective: Objective, v: number) =>
+  objective === 'efficiency' ? 100 * v : objective === 'lateral' ? (v > 0 ? 1 / v - 1 : Infinity) : v;
+
 // Box-bounded search: variables live in [0,1] and are mapped onto each slider's range.
 // 'armSplit' is not a parameter but a share: the fraction of a fixed beam (long + short arm = armTotal) given to the long arm.
-export type OptVar = keyof Params | 'armSplit';
+export type OptVar = keyof Params | 'armSplit' | 'pinOffset';
 
 // Range of that fraction keeping both arms inside their slider limits (empty when lo > hi: the beam is too short or too long).
 export function armSplitRange(total: number): [number, number] {
@@ -27,20 +60,21 @@ export function armSplitRange(total: number): [number, number] {
   return [Math.max(l0 / total, 1 - s1 / total), Math.min(1 - s0 / total, l1 / total)];
 }
 
-export function paramMapper(base: Params, vars: OptVar[], armTotal = base.longArm + base.shortArm) {
-  const bounds = (k: OptVar): [number, number] => (k === 'armSplit' ? armSplitRange(armTotal) : [RANGES[k][0], RANGES[k][1]]);
+export function paramMapper(base: OptParams, vars: OptVar[], armTotal = base.longArm + base.shortArm) {
+  const bounds = (k: OptVar): [number, number] => (k === 'armSplit' ? armSplitRange(armTotal) : k === 'pinOffset' ? PIN_RANGE : [RANGES[k][0], RANGES[k][1]]);
   return {
-    toUnit: (p: Params) =>
+    toUnit: (p: OptParams) =>
       vars.map((k) => {
         const [lo, hi] = bounds(k);
-        return ((k === 'armSplit' ? p.longArm / (p.longArm + p.shortArm) : p[k]) - lo) / (hi - lo);
+        return ((k === 'armSplit' ? p.longArm / (p.longArm + p.shortArm) : k === 'pinOffset' ? (p.pinOffset ?? 0) : p[k]) - lo) / (hi - lo);
       }),
-    toParams: (u: number[]): Params => {
-      const p = { ...base };
+    toParams: (u: number[]): OptParams => {
+      const p: OptParams = { ...base };
       vars.forEach((k, i) => {
         const [lo, hi] = bounds(k);
         const v = lo + Math.min(1, Math.max(0, u[i])) * (hi - lo);
         if (k === 'armSplit') (p.longArm = armTotal * v), (p.shortArm = armTotal * (1 - v));
+        else if (k === 'pinOffset') p.pinOffset = v;
         else p[k] = v;
       });
       return p;

@@ -1,6 +1,6 @@
 import { css, drawChart, drawHeatmap, heatCell, timeAt, type ChartSpec, type HeatSpec } from './charts';
 import { LABELS, RANGES } from './labels';
-import { armSplitRange, distinctOptima, evaluate, latinHypercube, paramMapper, type Objective, type OptVar } from './optimize';
+import { armSplitRange, distinctOptima, evaluate, latinHypercube, paramMapper, shotsPerEval, shownValue, type Env3, type Objective, type OptParams, type OptVar } from './optimize';
 import type { Reply, Request } from './optimize.worker';
 import { KINDS, type Kind, type Params } from './presets';
 
@@ -8,16 +8,23 @@ const ENVIRONMENT: (keyof Params)[] = ['airDensity', 'dragCd', 'axleMu', 'axleRa
 const DEFAULT_ON: (keyof Params)[] = ['slingLength', 'releaseDeg'];
 const STARTS = 8; // current design + 7 Latin-hypercube points
 
-export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p: Partial<Params>) => void }) {
+const OBJECTIVE_NAMES: Record<Objective, string> = { range: 'Alcance', efficiency: 'Eficiência', lateral: 'Desvio lateral', robust: 'Alcance robusto' };
+const label = (k: keyof OptParams) => (k === 'pinOffset' ? 'Pino fora do centro (m)' : LABELS[k]);
+
+// env3: the 3D conditions while the 3D view is on (then everything runs on the 3D solver), else undefined.
+// applyPin: write an optimized pin offset (m) back to the 3D field.
+export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p: Partial<Params>) => void; env3: () => Env3 | undefined; applyPin: (m: number) => void }) {
   const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
   const sweepCanvas = $<HTMLCanvasElement>('sweep');
   let pool: Worker[] = [];
   let plot: { draw: (hoverX?: number, hoverY?: number) => void; click: (x: number, y: number) => void } | undefined;
 
   const objective = () => $<HTMLSelectElement>('objective').value as Objective;
-  const shown = (v: number) => (objective() === 'range' ? v : 100 * v);
-  const unit = () => (objective() === 'range' ? 'm' : '%');
-  const fmt = (v: number) => `${shown(v).toFixed(1)} ${unit()}`;
+  const shown = (v: number) => shownValue(objective(), v);
+  const unit = () => (objective() === 'efficiency' ? '%' : 'm');
+  const fmt = (v: number) => `${shown(v).toFixed(objective() === 'lateral' ? 2 : 1)} ${unit()}`;
+  // 'lateral' and 'robust' only exist on the 3D solver
+  const needs3d = () => (objective() === 'lateral' || objective() === 'robust') && !o.env3() && (status('Esse objetivo usa o motor 3D: ligue a "Vista 3D" primeiro.'), true);
   const status = (t: string) => ($('opt-status').textContent = t);
 
   function busy(on: boolean) {
@@ -76,7 +83,7 @@ export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p:
   }
   const start = (req: Request, onDone: (r: Reply) => void) =>
     runPool([req], {
-      progress: (r) => r.type === 'progress' && status(r.total ? `Varrendo… linha ${r.done}/${r.total} (${r.evals} simulações)` : ''),
+      progress: (r) => r.type === 'progress' && status(r.total ? `Varrendo… linha ${r.done}/${r.total} (${r.evals * shotsPerEval(objective())} simulações)` : ''),
       each: onDone,
       done: () => {},
     });
@@ -90,7 +97,9 @@ export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p:
   $('opt-run').addEventListener('click', () => {
     const arm = $<HTMLInputElement>('opt-arm').checked;
     const armTotal = Number($<HTMLInputElement>('opt-arm-total').value);
-    const vars: OptVar[] = [...$('opt-vars').querySelectorAll<HTMLInputElement>('input:checked')].map((i) => i.value as keyof Params);
+    if (needs3d()) return;
+    const env3 = o.env3();
+    const vars: OptVar[] = [...$('opt-vars').querySelectorAll<HTMLInputElement>('input:checked')].map((i) => i.value as OptVar);
     if (arm) {
       const [lo, hi] = armSplitRange(armTotal);
       if (!Number.isFinite(armTotal) || lo >= hi) return void status(`Comprimento total do braço fora do possível: use entre ${armTotalLimits().join(' e ')} m.`);
@@ -98,51 +107,56 @@ export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p:
     }
     if (!vars.length) return void status('Marque ao menos uma variável.');
     $('opt-result').innerHTML = '';
-    const map = paramMapper(o.params, vars, arm ? armTotal : undefined);
+    const base: OptParams = { ...o.params, ...(env3 ? { pinOffset: env3.pinOffset } : {}) };
+    const map = paramMapper(base, vars, arm ? armTotal : undefined);
     const kind = o.kind();
     const obj = objective();
-    const startsU = [map.toUnit(o.params), ...latinHypercube(STARTS - 1, vars.length)];
-    const reqs: Request[] = startsU.map((u) => ({ type: 'optimize', kind, params: map.toParams(u), vars, objective: obj, maxEvals: 30 + 25 * vars.length, ...(arm ? { armTotal } : {}) }));
-    const found: { u: number[]; value: number; params: Params }[] = [];
+    const startsU = [map.toUnit(base), ...latinHypercube(STARTS - 1, vars.length)];
+    const reqs: Request[] = startsU.map((u) => ({ type: 'optimize', kind, params: map.toParams(u), vars, objective: obj, maxEvals: 30 + 25 * vars.length, ...(arm ? { armTotal } : {}), ...(env3 ? { env3 } : {}) }));
+    const found: { u: number[]; value: number; params: OptParams }[] = [];
     let current = 0;
     let evals = 0;
     status(`Otimizando a partir de ${STARTS} pontos em paralelo…`);
     runPool(reqs, {
       each: (r, i) => {
         if (r.type !== 'optimized') return;
-        if (i === 0) current = arm ? evaluate(kind, o.params, obj) : r.start; // start 0 is the current design (its arms may be rescaled to the new total)
-        evals += r.evals;
+        if (i === 0) current = arm ? evaluate(kind, base, obj, env3) : r.start; // start 0 is the current design (its arms may be rescaled to the new total)
+        evals += r.evals * shotsPerEval(obj);
         found.push({ u: map.toUnit(r.params), value: r.value, params: r.params });
         status(`Otimizando… ${found.length}/${STARTS} partidas concluídas · ${evals} simulações`);
       },
-      done: () => showOptima(vars, distinctOptima(found), current, evals, arm ? armTotal : undefined),
+      done: () => showOptima(vars, distinctOptima(found), current, evals, base, arm ? armTotal : undefined),
     });
   });
 
-  function showOptima(optVars: OptVar[], all: ReturnType<typeof distinctOptima<{ u: number[]; value: number; params: Params }>>, current: number, evals: number, armTotal?: number) {
-    const vars = optVars.flatMap((v): (keyof Params)[] => (v === 'armSplit' ? ['longArm', 'shortArm'] : [v])); // table columns
-    const name = objective() === 'range' ? 'Alcance' : 'Eficiência';
+  function showOptima(optVars: OptVar[], all: ReturnType<typeof distinctOptima<{ u: number[]; value: number; params: OptParams }>>, current: number, evals: number, base: OptParams, armTotal?: number) {
+    const vars = optVars.flatMap((v): (keyof OptParams)[] => (v === 'armSplit' ? ['longArm', 'shortArm'] : [v])); // table columns
+    const name = OBJECTIVE_NAMES[objective()];
     const sum = +(o.params.longArm + o.params.shortArm).toFixed(3);
     if (!all.length) return void status(`Nenhuma das ${STARTS} partidas produziu um disparo válido. ` +
       (armTotal !== undefined && armTotal !== sum ? `Com o braço total de ${armTotal} m o design não fecha: tente um total mais perto do atual (${sum} m).` : 'Revise o design.'));
     // optima far below the best are dead ends (often stuck on a slider limit): count them, don't list them
     const optima = all.filter((op) => op.value >= 0.5 * all[0].value);
     const stuck = STARTS - optima.reduce((n, op) => n + op.count, 0);
-    const gain = (v: number) => (current > 0 ? ` <span class="muted">(${v >= current ? '+' : ''}${((100 * (v - current)) / current).toFixed(1)}%)</span>` : '');
+    const gain = (v: number) => (current > 0 && objective() !== 'lateral' ? ` <span class="muted">(${v >= current ? '+' : ''}${((100 * (v - current)) / current).toFixed(1)}%)</span>` : '');
     const stuckNote = stuck ? ` ${stuck} partida(s) terminaram em designs que falham ou rendem menos da metade, e foram omitidas.` : '';
     status((optima.length === 1
       ? `${STARTS} partidas, ${evals} simulações: todas as que deram certo chegaram ao mesmo ótimo, provavelmente o global nessa faixa.`
       : `${STARTS} partidas, ${evals} simulações: ${optima.length} ótimos locais distintos. Compare as soluções.`) + stuckNote);
     $('opt-result').innerHTML = `<table>
-      <tr><th></th>${vars.map((k) => `<th>${LABELS[k]}</th>`).join('')}<th>${name}</th><th>achado</th><th></th></tr>
-      <tr><td>atual</td>${vars.map((k) => `<td>${+o.params[k].toPrecision(4)}</td>`).join('')}<td>${fmt(current)}</td><td></td><td></td></tr>
+      <tr><th></th>${vars.map((k) => `<th>${label(k)}</th>`).join('')}<th>${name}</th><th>achado</th><th></th></tr>
+      <tr><td>atual</td>${vars.map((k) => `<td>${+(base[k] ?? 0).toPrecision(4)}</td>`).join('')}<td>${fmt(current)}</td><td></td><td></td></tr>
       ${optima.map((op, i) => `<tr><td>${i === 0 ? '<b>melhor</b>' : `#${i + 1}`}</td>
-        ${vars.map((k) => `<td>${+op.params[k].toPrecision(4)}</td>`).join('')}
+        ${vars.map((k) => `<td>${+(op.params[k] ?? 0).toPrecision(4)}</td>`).join('')}
         <td><b>${fmt(op.value)}</b>${gain(op.value)}</td><td>${op.count}×</td>
         <td><button type="button" class="ghost" data-opt="${i}">Aplicar</button></td></tr>`).join('')}
     </table>`;
     $('opt-result').querySelectorAll<HTMLButtonElement>('[data-opt]').forEach((b) =>
-      b.addEventListener('click', () => o.apply(Object.fromEntries(vars.map((k) => [k, +optima[Number(b.dataset.opt)].params[k].toPrecision(4)])))),
+      b.addEventListener('click', () => {
+        const { pinOffset, ...rest } = Object.fromEntries(vars.map((k) => [k, +(optima[Number(b.dataset.opt)].params[k] ?? 0).toPrecision(4)])) as Partial<OptParams>;
+        if (pinOffset !== undefined) o.applyPin(pinOffset); // before apply(): it re-runs the shot with the field's value
+        o.apply(rest);
+      }),
     );
   }
 
@@ -150,10 +164,12 @@ export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p:
     const x = $<HTMLSelectElement>('sw-x').value as keyof Params;
     const yv = $<HTMLSelectElement>('sw-y').value as keyof Params | '';
     const y = yv && yv !== x ? yv : undefined;
-    const title = objective() === 'range' ? 'Alcance' : 'Eficiência';
-    start({ type: 'sweep', kind: o.kind(), params: { ...o.params }, x, y, objective: objective() }, (r) => {
+    if (needs3d()) return;
+    const title = OBJECTIVE_NAMES[objective()];
+    const env3 = o.env3();
+    start({ type: 'sweep', kind: o.kind(), params: { ...o.params }, x, y, objective: objective(), ...(env3 ? { env3 } : {}) }, (r) => {
       if (r.type !== 'swept') return;
-      status(`Varredura concluída: ${r.z.flat().length} simulações. Clique no gráfico para aplicar um ponto.`);
+      status(`Varredura concluída: ${r.z.flat().length * shotsPerEval(objective())} simulações. Clique no gráfico para aplicar um ponto.`);
       sweepCanvas.hidden = false;
       const z = r.z.map((row) => row.map(shown));
       if (r.ys && y) {
@@ -191,7 +207,7 @@ export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p:
       const fields = KINDS[o.kind()].fields.filter((f) => !ENVIRONMENT.includes(f));
       $('opt-vars').innerHTML = fields
         .map((f) => `<label><input type="checkbox" value="${f}" ${DEFAULT_ON.includes(f) ? 'checked' : ''}>${LABELS[f]}</label>`)
-        .join('');
+        .join('') + (o.env3() ? `<label><input type="checkbox" value="pinOffset">${label('pinOffset')}</label>` : '');
       const opts = fields.map((f) => `<option value="${f}">${LABELS[f]}</option>`).join('');
       $('sw-x').innerHTML = opts;
       $('sw-y').innerHTML = '<option value="">— nenhum (curva 1D)</option>' + opts;

@@ -49,10 +49,10 @@ export function lift(m: Mechanism): Mechanism3 {
   };
 }
 
-// Out-of-plane conditions a planar model can't have: a crosswind (m/s, +z) and the release pin mounted off the arm's
+// Out-of-plane conditions a planar model can't have: a crosswind (m/s, +z; windX: tail wind) and the release pin off the arm's
 // center line (m, +z). The sling is re-measured from the moved pin to the stone, which stays on the center line.
-export function apply3d(m: Mechanism3, o: { windZ: number; pinOffset: number }): Mechanism3 {
-  const out: Mechanism3 = { ...m, air: { ...m.air, wind: [0, 0, o.windZ] }, joints: [...m.joints] };
+export function apply3d(m: Mechanism3, o: { windZ: number; pinOffset: number; windX?: number }): Mechanism3 {
+  const out: Mechanism3 = { ...m, air: { ...m.air, wind: [o.windX ?? 0, 0, o.windZ] }, joints: [...m.joints] };
   const j = m.joints[m.sling];
   if (j.kind !== 'rope' || !o.pinOffset) return out;
   const atA = j.a !== m.projectile; // which end holds the pin
