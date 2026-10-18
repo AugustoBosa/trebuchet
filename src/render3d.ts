@@ -38,6 +38,7 @@ export function createView3d(canvas: HTMLCanvasElement) {
   const wire = { ink: new THREE.LineBasicMaterial(), muted: new THREE.LineBasicMaterial(), accent: new THREE.LineBasicMaterial() };
   const flightMat = new THREE.LineDashedMaterial({ dashSize: 1, gapSize: 1 });
   const nodeMat = new THREE.MeshBasicMaterial({ depthTest: false, transparent: true, opacity: 0.85 }); // nodes stay visible inside parts
+  const hlMat = new THREE.MeshStandardMaterial({ roughness: 0.4, emissiveIntensity: 0.35 }); // the selected part
   let built: { m: Mechanism3; r: Result3; group: THREE.Group; machine: THREE.Group; update: (q: Float64Array, t: number) => void } | undefined;
   let span0 = 0;
   let shown: { q: Float64Array; t: number } | undefined; // the pose on screen
@@ -148,10 +149,35 @@ export function createView3d(canvas: HTMLCanvasElement) {
       if (hit) pick([Math.round(hit.x / 0.05) * 0.05, Math.max(0, Math.round(hit.y / 0.05) * 0.05), pickZ]);
       return;
     }
-    if (!handles.length || tc.axis) return; // on the gizmo: TransformControls handles it
-    const hit = ray.intersectObjects(nodeGroup.children)[0];
-    if (hit) select(nodeGroup.children.indexOf(hit.object));
+    if (tc.axis) return; // on the gizmo: TransformControls handles it
+    const hit = handles.length ? ray.intersectObjects(nodeGroup.children)[0] : undefined;
+    if (hit) return select(nodeGroup.children.indexOf(hit.object));
+    if (e.button === 0 && e.isPrimary) down = { x: e.clientX, y: e.clientY, ndc }; // a part click, unless it turns into an orbit drag
   });
+  let down: { x: number; y: number; ndc: THREE.Vector2 } | undefined;
+  let onPart: ((key: string | undefined) => void) | undefined;
+  let hl = new Set<string>();
+  canvas.addEventListener('pointercancel', () => (down = undefined));
+  canvas.addEventListener('pointerup', (e) => {
+    const d = down;
+    down = undefined;
+    if (!d || !onPart || !built?.r || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 4) return;
+    ray.setFromCamera(d.ndc, camera);
+    ray.params.Line = { threshold: 0.006 * (span0 || 10) };
+    const hit = ray.intersectObjects(built.machine.children, false).find((h) => h.object.userData.key && h.object.visible);
+    onPart(hit?.object.userData.key);
+  });
+  // selected part in the accent color (original material kept in userData to restore)
+  function paint() {
+    built?.machine.children.forEach((o) => {
+      const obj = o as THREE.Mesh | THREE.Line;
+      const key = o.userData.key as string | undefined;
+      if (!key) return;
+      o.userData.mat ??= obj.material;
+      const isLine = (o as THREE.Line).isLine;
+      obj.material = hl.has(key) ? (isLine ? wire.accent : hlMat) : o.userData.mat;
+    });
+  }
 
   // straight line whose ends move every frame
   function seg(mat: THREE.LineBasicMaterial, group: THREE.Group) {
@@ -179,7 +205,14 @@ export function createView3d(canvas: HTMLCanvasElement) {
     const ups: ((q: Float64Array) => void)[] = [];
     const q0 = r.frames[0].q;
 
-    for (const j of m.joints) {
+    // every object below carries the key of the part it draws (b:i, j:i, s:i, p:i): clicks find parts by it
+    const tag = (n0: number, key: string) => group.children.slice(n0).forEach((o) => (o.userData.key = key));
+    m.joints.forEach((j, ji) => {
+      const n0 = group.children.length;
+      drawJoint(j);
+      tag(n0, `j:${ji}`);
+    });
+    function drawJoint(j: Mechanism3['joints'][number]) {
       if (j.kind === 'pin' && j.b === 'ground') {
         // axle along the pin's axis (tilted pins too), an A-frame under each end
         const ends = [-W, W].map((k): V3 => [j.pb[0] + k * j.axisB[0], j.pb[1] + k * j.axisB[1], j.pb[2] + k * j.axisB[2]]);
@@ -226,32 +259,37 @@ export function createView3d(canvas: HTMLCanvasElement) {
         ups.push((q) => set(world(q, j.a, j.pa), world(q, j.b, j.pb)));
       }
     }
-    for (const sp of m.springs ?? []) {
+    (m.springs ?? []).forEach((sp, i) => {
       const set = seg(wire.accent, group);
+      group.children.at(-1)!.userData.key = `s:${i}`;
       ups.push((q) => set(world(q, sp.body, sp.local), sp.anchor));
-    }
-    for (const pl of m.pulls ?? []) {
+    });
+    (m.pulls ?? []).forEach((pl, i) => {
       const set = seg(wire.accent, group); // crew rope
+      group.children.at(-1)!.userData.key = `p:${i}`;
       ups.push((q) => {
         const a = world(q, pl.body, pl.local);
         set(a, [a[0], 0, a[2]]);
       });
-    }
+    });
 
     m.bodies.forEach((bd, i) => {
       if (i === m.projectile) return;
       const mesh = bd.shape.kind === 'rod'
         ? new THREE.Mesh(new THREE.BoxGeometry(bd.shape.length, 1.4 * th, 1.4 * th), solid.ink)
         : new THREE.Mesh(new THREE.SphereGeometry(bd.shape.radius, 24, 16), solid.ink);
+      mesh.userData.key = `b:${i}`;
       group.add(mesh);
       ups.push((q) => (mesh.position.set(q[7 * i], q[7 * i + 1], q[7 * i + 2]), mesh.quaternion.set(q[7 * i + 4], q[7 * i + 5], q[7 * i + 6], q[7 * i + 3])));
     });
     const ps = m.bodies[m.projectile].shape;
     const proj = new THREE.Mesh(new THREE.SphereGeometry(Math.max(ps.kind === 'disk' ? ps.radius : 0.1, 0.004 * span), 20, 14), solid.accent);
+    proj.userData.key = `b:${m.projectile}`;
     group.add(proj);
     const slingSet = seg(wire.accent, group);
     const sling = m.joints[m.sling];
     const slingObj = group.children.at(-1)!;
+    slingObj.userData.key = `j:${m.sling}`;
 
     const update = (q: Float64Array, t: number) => {
       ups.forEach((u) => u(q));
@@ -316,10 +354,13 @@ export function createView3d(canvas: HTMLCanvasElement) {
       for (const k of ['ink', 'muted', 'accent'] as const) solid[k].color.set(css(`--${k}`)), wire[k].color.set(css(`--${k}`));
       flightMat.color.set(css('--accent'));
       nodeMat.color.set(css('--accent'));
+      hlMat.color.set(css('--accent'));
+      hlMat.emissive.set(css('--accent'));
       if (built?.m !== m || built.r !== r) {
         if (built) scene.remove(built.group), built.group.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
         built = build(m, r, b);
         scene.add(built.group);
+        paint();
       }
       const dtF = r.frames.length > 1 ? r.frames[1].t - r.frames[0].t : 1;
       shown = { q: r.frames[Math.min(r.frames.length - 1, Math.round(t / dtF))].q, t };
@@ -330,6 +371,9 @@ export function createView3d(canvas: HTMLCanvasElement) {
     // or binary STL in millimeters (STL has no units; CAD and slicers read mm). Ropes, flight path, grid, nodes left out.
     async exportModel(format: 'glb' | 'stl'): Promise<Blob | undefined> {
       if (!built?.r) return undefined; // a sketch still being built has no machine to export
+      const keep = hl;
+      hl = new Set(); // the file gets the parts' own colors, not the selection's
+      paint();
       built.update(built.r.frames[0].q, 0);
       built.machine.updateMatrixWorld(true);
       const solid = new THREE.Group();
@@ -340,6 +384,8 @@ export function createView3d(canvas: HTMLCanvasElement) {
         c.matrix.copy(o.matrixWorld);
         solid.add(c);
       });
+      hl = keep;
+      paint();
       if (shown) built.update(shown.q, shown.t), render(); // back to what was on screen
       if (format === 'stl') {
         solid.scale.setScalar(1000);
@@ -432,6 +478,16 @@ export function createView3d(canvas: HTMLCanvasElement) {
       controls.target.copy(c);
       camera.position.set(c.x - 0.5 * d, 0.9 * d, c.z + 0.6 * d);
       controls.update();
+      render();
+    },
+    // a click on a part (no drag) reports its key; an empty spot reports undefined
+    setPartListener(cb: ((key: string | undefined) => void) | undefined) {
+      onPart = cb;
+    },
+    // keys of the selected part, drawn in the accent color
+    highlight(keys: string[]) {
+      hl = new Set(keys);
+      paint();
       render();
     },
     // show draggable nodes (undefined: none, e.g. while a shot plays). Keeps the selection when the list keeps its length.

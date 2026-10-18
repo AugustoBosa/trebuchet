@@ -5,7 +5,8 @@ import { mountOptimizer } from './optimizer-ui';
 import { G, type Mechanism, type Vec } from './physics/model';
 import { initialState, simulate, type Result } from './physics/solver';
 import { build, defaults, defaultsFor, geometry, KINDS, type Kind, type Params } from './presets';
-import { drawFlight, drawMachine, world, type Bounds, type View } from './render';
+import { drawFlight, drawMachine, partAt, world, type Bounds, type View } from './render';
+import { mechToSketch, presetOwner, presetParts, sketchParts, type Part, type Spec } from './parts';
 import type { View3d } from './render3d';
 import { apply3d, lift } from './physics3d/lift';
 import { add, rotate, type Mechanism3 } from './physics3d/model3';
@@ -13,7 +14,7 @@ import { apply3, compile3, moveNode, nodes3, type Tool3 } from './sketch3';
 import { gaussian, scatterStats } from './physics3d/dispersion';
 import { seeded } from './optimize';
 import { initialState3, type Result3 } from './physics3d/solver3';
-import { compile, emptySketch, toSketch } from './sketch';
+import { compile, emptySketch, toSketch, type Sketch } from './sketch';
 import { deleteDesign, download, importFile, listDesigns, loadCurrent, saveCurrent, saveDesign, type Design } from './storage';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -34,6 +35,7 @@ const editor = createEditor({
   onChange: () => saveCurrent(design()),
   active: () => isFree(),
   onView: () => current && ((current.b = editor.bounds()), drawAt(lastT)), // zoom while watching a shot
+  onSelect: (key) => ((selPart = key), renderInspector()),
 });
 const optimizer = mountOptimizer({
   kind: () => kindSel.value as Kind,
@@ -159,7 +161,7 @@ function dataTable(specs: ChartSpec[]) {
 const chartEls = ['chart-energy', 'chart-speed', 'chart-force'].map((id) => $<HTMLCanvasElement>(id));
 let raf = 0;
 // 3D view: the shot comes from the 3D solver (m3, r3); r is its planar shadow for the stats and charts
-let current: { m: Mechanism; r: Result; b: Bounds; specs: ChartSpec[]; m3?: Mechanism3; r3?: Result3 } | undefined;
+let current: { m: Mechanism; r: Result; b: Bounds; specs: ChartSpec[]; m3?: Mechanism3; r3?: Result3; sketch?: string } | undefined;
 let lastT = 0;
 
 const is3d = () => !!view3d && !machine3d.hidden;
@@ -185,7 +187,15 @@ let view3d: View3d | undefined;
 $('view3d').addEventListener('click', async (e) => {
   const btn = e.currentTarget as HTMLButtonElement;
   const on = btn.getAttribute('aria-pressed') !== 'true';
-  view3d ??= (await import('./render3d')).createView3d(machine3d);
+  if (!view3d) {
+    view3d = (await import('./render3d')).createView3d(machine3d);
+    view3d.setPartListener((key) => {
+      if (isFree()) return editor.select(key && mechToSketch(editor.get(), key)); // the editor reports back (onSelect)
+      const m = mechanismOrError();
+      selPart = key && m ? presetOwner(m).get(key) : undefined;
+      renderInspector(true);
+    });
+  }
   btn.setAttribute('aria-pressed', String(on));
   machine.hidden = on;
   machine3d.hidden = $('opts3d').hidden = !on;
@@ -254,7 +264,7 @@ function drawAt(t: number) {
   const { m, r, b, specs, m3, r3 } = current;
   machine.dataset.mode = 'play';
   if (view3d && m3 && r3) view3d.draw(m3, r3, t, b);
-  else drawMachine(machine, m, r, t, b);
+  else playView = drawMachine(machine, m, r, t, b, hlKeys);
   drawFlight($('flight'), r, t, b.x0);
   specs.forEach((s, i) => drawChart(chartEls[i], s, Math.min(t, s.t.at(-1)!)));
 }
@@ -262,8 +272,101 @@ function drawAt(t: number) {
 function design(): Design {
   const d: Design = { version: 1, name: $<HTMLInputElement>('name').value || 'Sem nome', kind: kindSel.value as Kind | 'free', params: { ...params } };
   if (isFree()) d.sketch = editor.get();
+  else if (Object.keys(spec).length) d.spec = spec;
   return d;
 }
+
+const esc = (t: string) => t.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+
+// --- part card (BIM-style inspector): click a part in either view; its dimensions, material and checks ---
+let spec: Spec = {}; // presets: material / section per part id (saved with the design)
+let selPart: string | undefined; // preset: part id; free design: sketch key b:i / j:i
+let hlKeys = new Set<string>(); // mechanism keys of the selected part, highlighted in both views
+let playView: View | undefined; // the 2D view of the shot on screen: a click picks the part where it is drawn now
+let cardParts: Part[] = [];
+
+// a sketch's geometry and masses, without names and materials: what the shot's forces depend on
+const shape = (sk: Sketch) => JSON.stringify(sk, (k, v) => (k === 'spec' || k === 'name' ? undefined : v));
+function partsNow(): Part[] {
+  const r = current?.r; // checks use the last shot (presets re-shoot on every edit)
+  if (isFree()) {
+    const sk = editor.get();
+    let m: Mechanism | undefined;
+    try { m = compile(sk); } catch { /* still being built: dimensions only */ }
+    const fresh = current?.sketch === shape(sk); // an edited sketch: its old forces may belong to other joints
+    return sketchParts({ sk, m, r: fresh ? r : undefined }).map((p) => (fresh || !r ? p : { ...p, note: 'Dispare de novo para ver as verificações com o esboço atual.' }));
+  }
+  try {
+    return presetParts({ kind: kindSel.value as Kind, p: params, spec, m: build(kindSel.value as Kind, params), r });
+  } catch {
+    return [];
+  }
+}
+
+function renderInspector(scroll = false) {
+  const box = $('inspector');
+  cardParts = selPart ? partsNow() : [];
+  const part = cardParts.find((p) => p.id === selPart);
+  const keys = part?.keys ?? [];
+  const changed = keys.join() !== [...hlKeys].join();
+  hlKeys = new Set(keys);
+  view3d?.highlight(keys);
+  if (changed && !isFree() && !is3d()) machine.dataset.mode === 'play' && current ? drawAt(lastT) : preview(); // repaint the 2D drawing
+  if (!part) return void ((box.hidden = true), (box.innerHTML = ''));
+  const input = (row: Part['rows'][number], i: number) => {
+    const inp = row.input!;
+    if (inp.kind === 'select') return `<select data-i="${i}" aria-label="${esc(row.label)}">${inp.options.map(([v, l]) => `<option value="${esc(v)}"${v === inp.value ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
+    if (inp.kind === 'text') return `<input type="text" data-i="${i}" aria-label="${esc(row.label)}" value="${esc(inp.value)}">`;
+    const field = `<input type="number" data-i="${i}" aria-label="${esc(row.label)}" step="${inp.step ?? 'any'}"${inp.min !== undefined ? ` min="${inp.min}"` : ''}${inp.max !== undefined ? ` max="${inp.max}"` : ''} value="${+inp.value.toPrecision(6)}">`;
+    return inp.unit ? `<span class="unit">${field}<span>${esc(inp.unit)}</span></span>` : field;
+  };
+  const focused = box.contains(document.activeElement) ? (document.activeElement as HTMLElement).id || (document.activeElement as HTMLElement).dataset.i : undefined;
+  box.innerHTML = `<header>
+      <select id="part-pick" aria-label="Peça">${cardParts.map((p) => `<option value="${esc(p.id)}"${p.id === part.id ? ' selected' : ''}>${esc(p.title)}</option>`).join('')}</select>
+      <button type="button" class="ghost" data-act="close" aria-label="Fechar a ficha">✕</button>
+    </header>
+    ${part.rows.map((row, i) => `<div class="r${row.status ? ` ${row.status}` : ''}"><span${row.hint ? ` title="${esc(row.hint)}"` : ''}>${esc(row.label)}</span>${row.input ? input(row, i) : `<b>${esc(row.value ?? '')}</b>`}${row.note ? `<small>${esc(row.note)}</small>` : ''}</div>`).join('')}
+    ${part.note ? `<p class="note">${esc(part.note)}</p>` : ''}`;
+  box.hidden = false;
+  if (focused) box.querySelector<HTMLElement>(focused === 'part-pick' ? '#part-pick' : `[data-i="${focused}"]`)?.focus();
+  if (scroll && matchMedia('(max-width: 800px)').matches) box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+$('inspector').addEventListener('change', (e) => {
+  const el = e.target as HTMLInputElement | HTMLSelectElement;
+  if (el.id === 'part-pick') {
+    if (isFree()) return editor.select(el.value);
+    return void ((selPart = el.value), renderInspector());
+  }
+  const part = cardParts.find((p) => p.id === selPart);
+  const inp = part?.rows[Number(el.dataset.i)]?.input;
+  if (!inp) return;
+  const apply = () => (inp.kind === 'number' ? Number.isFinite(+el.value) && el.value !== '' && inp.set(+el.value) : inp.set(el.value));
+  if (isFree()) {
+    editor.mutate(apply); // undoable; the editor redraws and reports back
+    if (is3d()) preview();
+    return;
+  }
+  apply();
+  syncForm();
+  run(); // re-shoot: new geometry, new checks
+});
+function closeCard() {
+  if (isFree()) editor.select(undefined);
+  else (selPart = undefined), renderInspector();
+  $('parts-btn').focus(); // back where keyboard users open it
+}
+$('inspector').addEventListener('click', (e) => (e.target as HTMLElement).dataset.act === 'close' && closeCard());
+$('inspector').addEventListener('keydown', (e) => e.key === 'Escape' && closeCard());
+// keyboard (and a way to reach parts with no drawing of their own): open the card on the first part, or move to it
+$('parts-btn').addEventListener('click', () => {
+  if (selPart) return $('part-pick')?.focus();
+  const first = partsNow()[0]?.id;
+  if (!first) return;
+  if (isFree()) editor.select(first);
+  else (selPart = first), renderInspector();
+  $('part-pick')?.focus();
+});
 
 // --- preset handles (drag points on the canvas) ---
 type Handle = { label: string; pos: Vec; apply: (p: Vec) => void };
@@ -318,7 +421,7 @@ function preview() {
   const m = mechanismOrError();
   if (!m) return;
   machine.dataset.mode = 'handles';
-  handleView = drawMachine(machine, m, stillResult(m), 0, bounds());
+  handleView = drawMachine(machine, m, stillResult(m), 0, bounds(), hlKeys);
   const g = machine.getContext('2d')!; // same transform drawMachine just set
   g.font = '11px system-ui, sans-serif';
   for (const hd of handles(m)) {
@@ -339,11 +442,26 @@ machine.addEventListener('pointerdown', (e) => {
   }
   const m = mechanismOrError();
   if (!m) return;
-  if (machine.dataset.mode !== 'handles') preview();
   const rect = machine.getBoundingClientRect();
   const pt: Vec = [e.clientX - rect.left, e.clientY - rect.top];
+  if (machine.dataset.mode === 'play' && current && playView) {
+    // a click on a shot: the part where it is drawn at this instant; then back to the cocked pose, part still selected
+    const { r } = current;
+    const dtF = r.frames.length > 1 ? r.frames[1].t - r.frames[0].t : 1;
+    const q = r.frames[Math.min(r.frames.length - 1, Math.round(lastT / dtF))].q;
+    const key = partAt(current.m, q, playView.W(...pt), 8 / playView.s, current.b);
+    if (key) {
+      selPart = presetOwner(m).get(key);
+      preview();
+      return renderInspector(true);
+    }
+  }
+  if (machine.dataset.mode !== 'handles') preview();
   dragHandle = handles(m).find((h) => dist(handleView!.P(h.pos), pt) < 12);
-  if (dragHandle) machine.setPointerCapture(e.pointerId);
+  if (dragHandle) return void machine.setPointerCapture(e.pointerId);
+  const key = partAt(m, initialState(m).q, handleView!.W(...pt), 8 / handleView!.s, bounds());
+  selPart = key && presetOwner(m).get(key);
+  renderInspector(true);
 });
 machine.addEventListener('pointermove', (e) => {
   if (!dragHandle || !handleView) return;
@@ -513,8 +631,9 @@ function show(m: Mechanism, r: Result, m3?: Mechanism3, r3?: Result3) {
   if (r.error) $('err').textContent = r.error;
   stats(r, m, r3?.lateral);
   physicsPanel(r, m);
-  current = { m, r, b: bounds(), specs: chartSpecs(r, m), m3, r3 };
+  current = { m, r, b: bounds(), specs: chartSpecs(r, m), m3, r3, sketch: isFree() ? shape(editor.get()) : undefined };
   dataTable(current.specs);
+  renderInspector();
   const flightTime = r.release ? r.release.t + (r.flight.length - 1) * 1e-3 : r.frames.at(-1)!.t;
   const speed = Number($<HTMLSelectElement>('speed').value);
   const start = performance.now();
@@ -554,7 +673,8 @@ kindSel.addEventListener('change', () => {
   // own geometry (whipper, walking, MURLIN…) they would break the other machine: load the new kind's values instead.
   const prev = kindSel.dataset.prev as Kind | 'free' | undefined;
   const next = kindSel.value as Kind;
-  if (!isFree() && (!prev || prev === 'free' || KINDS[prev].preset || KINDS[next].preset)) Object.assign(params, defaultsFor(next));
+  if (!isFree() && (!prev || prev === 'free' || KINDS[prev].preset || KINDS[next].preset)) Object.assign(params, defaultsFor(next)), (spec = {});
+  selPart = undefined;
   if (isFree() && !editor.get()) editor.set(toSketch(build('fixed', defaults), { troughMu: defaults.troughMu }));
   buildForm();
   if (isFree()) preview();
@@ -565,7 +685,14 @@ $('info-btn').addEventListener('click', () => $<HTMLDialogElement>('info-dlg').s
 $('to-free').addEventListener('click', () => {
   const m = mechanismOrError();
   if (!m) return;
-  editor.set(toSketch(m, { troughMu: params.troughMu }));
+  const sk = toSketch(m, { troughMu: params.troughMu });
+  const arm = (m.joints[m.axle] as { a: number }).a; // bodies keep their order; find the sling rope and the ground axle
+  if (spec.arm) sk.bodies[arm].spec = { ...spec.arm };
+  const slingJ = sk.joints.find((j) => j.kind === 'rope' && (j.a === m.projectile || j.b === m.projectile));
+  if (spec.sling && slingJ) slingJ.spec = { ...spec.sling };
+  const axleJ = sk.joints.find((j) => j.kind === 'pin' && j.b === 'ground' && j.a === arm);
+  if (spec.axle && axleJ) axleJ.spec = { ...spec.axle };
+  editor.set(sk);
   kindSel.value = 'free';
   buildForm();
   preview();
@@ -576,13 +703,15 @@ $('new-sketch').addEventListener('click', () => {
 });
 
 // --- designs: localStorage + JSON files ---
-const escape = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+
 function refreshSaved() {
-  $('saved').innerHTML = '<option value="">Meus designs…</option>' + listDesigns().map((d) => `<option>${escape(d.name)}</option>`).join('');
+  $('saved').innerHTML = '<option value="">Meus designs…</option>' + listDesigns().map((d) => `<option>${esc(d.name)}</option>`).join('');
 }
 function load(d: Design) {
   kindSel.value = d.kind;
   Object.assign(params, d.params);
+  spec = d.spec ?? {};
+  selPart = undefined;
   $<HTMLInputElement>('name').value = d.name;
   if (d.kind === 'free') editor.set(d.sketch ?? emptySketch());
   buildForm();

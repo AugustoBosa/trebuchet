@@ -16,6 +16,22 @@ Só restam itens que dependem de dados que não existem em fonte pública. Retom
    - **BAKA:** a sigla não é definida em nenhuma fonte.
    - **Fiffer:** a topologia está descrita pelo construtor de um protótipo (vídeo "Fiffer explanation", beardedone85, 2011): viga do contrapeso articulada atrás, duas barras em tesoura empurrando um pino para baixo e para a frente, e uma correia que puxa a ponta curta do braço por um came. Uma reconstrução com proporções estimadas puxava a correia só ~8 cm e travava num ponto morto aos ~41° de queda da viga; um resultado aparentemente bom (~102 m) vinha de energia criada nesse travamento. Falta o arranjo real da tesoura e o raio do came.
 
+## 2026-10-18: ficha de peça (inspetor estilo BIM), 2D e 3D
+
+- **Clique numa peça** no desenho 2D ou na vista 3D (clique sem arrastar) para abrir a ficha dela. A peça fica destacada nas duas vistas. O botão **Peças** abre a ficha pelo teclado, e a lista no topo da ficha alcança peças sem desenho próprio, como os pinos entre peças no 3D.
+- **Tudo é selecionável:** braço, contrapeso, haste, projétil, perna, funda, cordas, eixo e pórtico, trilhos, guia, rolete, tambor, chão de pouso, molas, equipe e qualquer outra ligação.
+- **Edição com recálculo.** Nos presets, os campos da ficha são os mesmos controles (mesmos limites e dicas), e cada edição refaz o disparo. No editor livre, a ficha substitui os campos do painel lateral (inclusive a inclinação 3D do pino), e as edições entram no Ctrl+Z.
+- **Material, seção e verificações** (valores característicos típicos; uma checagem à mão, não uma norma):
+  - **Barras** (madeira C24/D30/D40, alumínio 6061-T6, aço S235): seção b × h. A massa passa a ser ρ·b·h·L quando você mexe em material ou seção. Sem seção digitada, ela é estimada pela massa (quadrada) e o fator de segurança avisa isso. Na barra do eixo, σ = M/W com W = b·h²/6 e o pico de flexão do disparo.
+    - Exemplo: o articulado padrão, com braço de 60 kg em carvalho, dá σ = 68,6 MPa contra 30 MPa (FS 0,44, falha). Com 20 × 35 cm, o braço pesa 280 kg, σ cai para 3,1 MPa, mas o alcance cai de 225 para 83 m.
+  - **Cordas** (sisal, poliéster, nylon, cabo de aço, Dyneema): ruptura ≈ σᵤ·πd²/4 contra o pico de tração; "ok" a partir de FS 5, por causa dos nós.
+  - **Eixo** (aço S235/S355): cisalhamento duplo τ = 4/3·(F/2)/(πr²) contra f_y/√3. O articulado padrão dá FS 26.
+  - **Contrapeso e projétil:** material escolhido numa lista. No contrapeso ele define a densidade (mesma massa); no projétil, a massa para o raio dado.
+- No editor livre, as verificações só usam um disparo do esboço como está agora. Depois de uma edição, a ficha pede um novo disparo.
+- Material e seção ficam salvos com o design (presets) ou em cada peça do esboço, e passam pela sanitização na importação. "Converter para o editor livre" leva os materiais de braço, funda e eixo.
+- No celular a ficha fica logo abaixo do desenho; no computador ela flutua no canto dele.
+- Testes novos (`test/parts.test.ts`): toda peça dos 13 presets abre uma ficha; fórmulas conferidas com contas à mão; massa pela seção; clique 2D acha braço, contrapeso, projétil, funda e eixo em todos os presets; abrir uma ficha não grava material vazio; limite de FS das cordas.
+
 ## 2026-10-17: precisão do otimizador, barra 3D no celular, teclado no 3D
 
 - **Impactos no instante certo (2D e 3D).** Quando um contato fecha no meio de um passo, a simulação volta ao instante do toque (interpolando no passo), aplica o impacto ali e completa o passo.

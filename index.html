@@ -26,7 +26,7 @@
       /* machine + results above the long control panel; charts after it */
       section { display: contents; }
       section > * { order: 1; }
-      #view-row, #machine, #machine3d, #stats { order: -1; }
+      #view-row, #stage, #stats { order: -1; }
     }
     main > * { min-width: 0; }
     h1 { font-size: 20px; margin: 0 0 12px; text-wrap: balance; }
@@ -69,6 +69,23 @@
     aside .row:has(#run) { position: sticky; bottom: 0; background: var(--bg); padding: 8px 0; margin: 0; z-index: 1; }
     [hidden] { display: none !important; }
     .muted { color: var(--muted); font-size: 13px; }
+    /* part card (BIM-style inspector): floats over the drawing's corner; under it on phones */
+    #stage { position: relative; }
+    #inspector { position: absolute; top: 8px; right: 8px; width: min(330px, 48%); max-height: calc(100% - 28px); overflow: auto; overscroll-behavior: contain; background: var(--bg); border: 1px solid var(--field); border-radius: 10px; padding: 10px 12px; box-shadow: 0 6px 20px rgb(0 0 0 / .2); font-size: 13px; z-index: 2; }
+    #inspector header { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+    #inspector header select { flex: 1; min-width: 0; font-weight: 700; }
+    #inspector header button { padding: 4px 10px; }
+    #inspector .r { display: grid; grid-template-columns: minmax(0, 1fr) 150px; gap: 2px 8px; align-items: center; margin: 5px 0; }
+    #inspector .r > span:first-child { color: var(--muted); }
+    #inspector .r b { font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+    #inspector .r small { grid-column: 1 / -1; color: var(--muted); font-size: 12px; }
+    #inspector .r .unit { display: flex; gap: 4px; align-items: center; }
+    #inspector .r select { width: 100%; padding: 4px 6px; }
+    #inspector .ok b { color: var(--series-3); }
+    #inspector .warn b { color: var(--series-2); }
+    #inspector .fail b { color: var(--danger); }
+    #inspector .note { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
+    @media (max-width: 800px) { #inspector { position: static; width: auto; max-height: none; box-shadow: none; margin: 0 0 12px; } }
     #tools { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
     #tools button { padding: 6px 4px; }
     #tools button.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
@@ -219,6 +236,7 @@
     </aside>
     <section>
       <div class="row" id="view-row"><button class="ghost" id="view3d" aria-pressed="false" title="Alterna entre o desenho 2D e a vista 3D (arraste para girar, roda do mouse para zoom)">Vista 3D</button>
+        <button type="button" class="ghost" id="parts-btn" aria-controls="inspector" title="Abre a ficha das peças (dimensões, material, verificações). Também abre clicando numa peça no desenho.">Peças</button>
         <span id="opts3d" hidden>
           <button type="button" class="ghost g3-toggle" aria-expanded="false" aria-controls="g3-cond">Condições</button>
           <span class="g3" id="g3-cond">
@@ -250,8 +268,11 @@
           </span>
           <span id="node3d" class="muted" aria-live="polite"></span>
         </span></div>
-      <canvas id="machine" role="img" aria-label="Desenho da máquina e animação do disparo" height="440"></canvas>
-      <canvas id="machine3d" role="img" aria-label="Vista 3D da máquina e do disparo. Mouse: arraste para girar, roda para aproximar. Teclado: setas deslocam a câmera, Shift mais setas giram, mais e menos aproximam, 0 recentraliza; em Editar nós, N escolhe o próximo nó, setas e PageUp ou PageDown o movem (Shift: passo fino), Enter confirma, Esc solta." height="440" hidden></canvas>
+      <div id="stage">
+      <canvas id="machine" role="img" aria-label="Desenho da máquina e animação do disparo. Clique numa peça para abrir a ficha dela." height="440"></canvas>
+      <canvas id="machine3d" role="img" aria-label="Vista 3D da máquina e do disparo. Mouse: arraste para girar, roda para aproximar. Teclado: setas deslocam a câmera, Shift mais setas giram, mais e menos aproximam, 0 recentraliza; em Editar nós, N escolhe o próximo nó, setas e PageUp ou PageDown o movem (Shift: passo fino), Enter confirma, Esc solta. Clique numa peça (sem arrastar) para abrir a ficha dela." height="440" hidden></canvas>
+      <aside id="inspector" aria-label="Ficha da peça" hidden></aside>
+      </div>
       <div id="stats" role="region" aria-label="Resultados do disparo" aria-live="polite"></div>
       <div id="physics"></div>
       <div class="charts">

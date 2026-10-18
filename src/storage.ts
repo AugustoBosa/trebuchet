@@ -1,6 +1,7 @@
 import { RANGES } from './labels';
 import { defaults, KINDS, type Kind, type Params } from './presets';
 import { sanitizeSketch, type Sketch } from './sketch';
+import { sanitizeSpec, type Spec } from './parts';
 
 export interface Design {
   version: 1;
@@ -8,6 +9,7 @@ export interface Design {
   kind: Kind | 'free';
   params: Params;
   sketch?: Sketch; // only for kind 'free'
+  spec?: Spec; // presets: material / section of each part (part card), by part id
 }
 
 const KEY = 'trebuchet.designs';
@@ -40,7 +42,12 @@ export function sanitize(raw: unknown): Design {
   }
   const name = String(d.name ?? 'Sem nome').slice(0, 80);
   if (d.kind === 'free') return { version: 1, name, kind: 'free', params, sketch: sanitizeSketch(d.sketch) };
-  return { version: 1, name, kind: d.kind, params };
+  const spec: Spec = {};
+  for (const [id, v] of Object.entries(d.spec && typeof d.spec === 'object' ? d.spec : {})) {
+    const s = sanitizeSpec(v);
+    if (s && /^[a-z]{2,8}$/.test(id)) spec[id] = s;
+  }
+  return { version: 1, name, kind: d.kind, params, ...(Object.keys(spec).length ? { spec } : {}) };
 }
 
 export const listDesigns = (): Design[] => read<unknown[]>(KEY, []).flatMap((d) => {

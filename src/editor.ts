@@ -39,6 +39,7 @@ export function createEditor(o: {
   onChange: () => void;
   active: () => boolean; // the canvas is shared with the presets
   onView: () => void; // zoom changed while a shot is displayed
+  onSelect?: (key: string | undefined) => void; // b:i / j:i of the sketch: the part card shows it
 }) {
   let sk: Sketch;
   let tool: Tool = 'select';
@@ -395,38 +396,13 @@ export function createEditor(o: {
 
   function renderPanel() {
     let html = '';
-    if (sel?.type === 'body') {
-      const b = sk.bodies[sel.i];
-      html += `<label>Nome<input type="text" data-k="name" value="${b.name.replace(/"/g, '&quot;')}"></label>` + field('Massa (kg)', 'mass', b.mass);
-      if (b.kind === 'rod') html += `<p class="muted">Comprimento: ${d2(b.a, b.b).toFixed(2)} m</p>`;
-      else html += field('Raio (m)', 'r', b.r) + `<label>Papel<select data-k="role">
-        ${[['', 'nenhum'], ['projectile', 'projétil'], ['counterweight', 'contrapeso']].map(([v, l]) => `<option value="${v}" ${(b.role ?? '') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>`;
-    } else if (sel?.type === 'joint') {
-      const j = sk.joints[sel.i];
-      const names: Record<SJoint['kind'], string> = { pin: 'Pino', weld: 'Solda', rope: 'Corda', slider: 'Trilho', pull: 'Equipe (tração)', stop: 'Apoio (pode descolar)', foot: 'Pé com espinhos (não escorrega, pode descolar)',
-        spike: 'Espetos no ar (cravam onde tocarem o chão)', roller: 'Rolete fixo (a barra desliza sobre ele)', floor: 'Chão sob este ponto', spring: 'Mola até uma âncora fixa', cam: 'Tambor em espiral (corda do contrapeso)' };
-      html += `<p><b>${names[j.kind]}</b>${'b' in j && j.b === 'ground' ? ' (preso ao chão)' : ''}</p>`;
-      if (j.kind === 'pin') html += field('Atrito μ', 'mu', j.mu ?? 0) + field('Raio do eixo (m)', 'radius', j.radius ?? 0.05) +
-        field('Eixo: inclinação (°, 3D)', 'pitch', j.pitch ?? 0) + field('Eixo: guinada (°, 3D)', 'yaw', j.yaw ?? 0) +
-        `<p class="muted">Inclinação ergue um lado do eixo; guinada o gira em planta. Só valem na Vista 3D: o eixo deixa de ser perpendicular ao plano e o braço gira num plano torto (máximo ±45°).</p>`;
-      if (j.kind === 'pull') html += field('Força da equipe (N)', 'force', j.force) + field('Curso do puxão (m)', 'stroke', j.stroke) +
-        `<p class="muted">Uma pessoa puxa ~200–300 N num puxão curto. Energia = força × curso = ${((j.force * j.stroke) / 1000).toFixed(1)} kJ.</p>`;
-      if (j.kind === 'rope') html += `<p class="muted">Comprimento: ${d2(j.pa, j.pb).toFixed(2)} m</p>`;
-      if (j.kind === 'floor') html += field('Altura do chão (m)', 'y', j.y) + field('Atrito ao pousar e deslizar (μ; rodas: Crr)', 'mu', j.mu ?? 0);
-      if (j.kind === 'slider' || j.kind === 'roller') html += field('Resistência ao rolamento (Crr)', 'mu', j.mu ?? 0) +
-        `<p class="muted">Força contra o rolamento = Crr × carga. Rodas duras em trilho ≈ 0,001–0,005; madeira ou skate ≈ 0,005–0,02.</p>`;
-      if (j.kind === 'spring') html += field('Rigidez k (N/m)', 'k', j.k) + field('Comprimento livre (m)', 'rest', j.rest) +
-        `<p class="muted">Agora: ${d2(j.at, j.anchor).toFixed(2)} m. Energia armazenada: ${((0.5 * j.k * Math.max(0, d2(j.at, j.anchor) - j.rest) ** 2) / 1000).toFixed(2)} kJ.</p>`;
-      if (j.kind === 'cam') html += field('Raio inicial (m)', 'r0', j.r0) + field('Raio final (m)', 'r1', j.r1) + field('Giro da espiral (rad)', 'span', j.span) +
-        field('Altura da polia (m, 0 = sem)', 'over', j.over?.[1] ?? 0) +
-        `<p class="muted">A corda desenrola ${((j.span * (j.r0 + j.r1)) / 2).toFixed(2)} m até o raio final.</p>`;
-    }
     if (sel) html += `<button type="button" class="ghost" data-act="delete">Apagar seleção</button>`;
     html += `<h2>Disparo</h2>` + field('Ângulo de liberação (°)', 'g.releaseDeg', sk.releaseDeg) + field('Densidade do ar', 'g.airDensity', sk.airDensity) +
       field('Coef. de arrasto Cd', 'g.dragCd', sk.dragCd) + field('Atrito na calha μ', 'g.troughMu', sk.troughMu) +
       field('Restituição dos impactos (e)', 'g.restitution', sk.restitution ?? 0);
     o.panel.innerHTML = html;
     validate();
+    o.onSelect?.(sel && `${sel.type === 'body' ? 'b' : 'j'}:${sel.i}`);
   }
 
   o.panel.addEventListener('change', (e) => {
@@ -437,32 +413,6 @@ export function createEditor(o: {
     const num = Number(el.value);
     if (k.startsWith('g.')) {
       if (Number.isFinite(num)) (sk as unknown as Record<string, number>)[k.slice(2)] = num;
-    } else if (sel?.type === 'body') {
-      const b = sk.bodies[sel.i];
-      if (k === 'name') b.name = el.value.slice(0, 40);
-      else if (k === 'role' && b.kind === 'disk') {
-        if (el.value === 'projectile') sk.bodies.forEach((x) => x.kind === 'disk' && x.role === 'projectile' && delete x.role);
-        if (el.value) b.role = el.value as Role; else delete b.role;
-      } else if (Number.isFinite(num) && num > 0) (b as unknown as Record<string, number>)[k] = num;
-    } else if (sel?.type === 'joint') {
-      const j = sk.joints[sel.i];
-      if (j.kind === 'pin' && (k === 'pitch' || k === 'yaw') && Number.isFinite(num)) {
-        if (num) j[k] = Math.max(-45, Math.min(45, num));
-        else delete j[k];
-      } else if (j.kind === 'pin' && Number.isFinite(num) && num >= 0) j[k as 'mu' | 'radius'] = num;
-      if (j.kind === 'pull' && Number.isFinite(num) && num > 0) j[k as 'force' | 'stroke'] = num;
-      if ((j.kind === 'floor' || j.kind === 'slider' || j.kind === 'roller') && k === 'mu' && Number.isFinite(num) && num >= 0) {
-        if (num) j.mu = Math.min(1, num);
-        else delete j.mu;
-      } else if (j.kind === 'floor' && Number.isFinite(num)) j.y = num;
-      if (j.kind === 'spring' && Number.isFinite(num) && num > 0) j[k as 'k' | 'rest'] = num;
-      if (j.kind === 'cam' && Number.isFinite(num)) {
-        if (k === 'over') { if (num > j.at[1]) j.over = [j.at[0] - j.r0, num]; else delete j.over; } // pulley above the drum, over its back side
-        else if (num > 0) {
-          j[k as 'r0' | 'r1' | 'span'] = num;
-          if (k === 'r0' && j.over) j.over = [j.at[0] - j.r0, j.over[1]];
-        }
-      }
     }
     changed();
   });
@@ -484,6 +434,14 @@ export function createEditor(o: {
 
   return {
     set(next: Sketch) { sk = next; sel = undefined; undo.length = 0; fit(); draw(); renderPanel(); },
+    // select a part by key (from the 3D view or the part list); undefined clears
+    select(key: string | undefined) {
+      const i = key ? +key.slice(2) : -1;
+      sel = key && (key[0] === 'b' ? i < sk.bodies.length : i < sk.joints.length) ? { type: key[0] === 'b' ? 'body' : 'joint', i } : undefined;
+      draw(); renderPanel();
+    },
+    // an edit from outside (the part card), undoable with Ctrl+Z
+    mutate(fn: () => void) { snapshot(); fn(); changed(); },
     fit() { fit(); draw(); },
     bounds: () => bounds,
     get: () => sk,

@@ -4,6 +4,7 @@ import { jointRows } from './physics/constraints';
 import type { Body, Joint, Mechanism, Vec } from './physics/model';
 import { initialState, startsActive } from './physics/solver';
 import { world } from './render';
+import { sanitizeSpec, type PartSpec } from './parts';
 
 export type Role = 'projectile' | 'counterweight';
 // depth (m, +z, across the machine) of a point, edited in the 3D view; absent = 0, the 2D plane
@@ -11,7 +12,7 @@ export type Depth = Partial<Record<'a' | 'b' | 'c' | 'at' | 'pa' | 'pb', number>
 export type SBody = (
   | { kind: 'rod'; name: string; a: Vec; b: Vec; mass: number }
   | { kind: 'disk'; name: string; c: Vec; r: number; mass: number; role?: Role }
-) & { z?: Depth };
+) & { z?: Depth; spec?: PartSpec };
 export type SJoint = (
   | { kind: 'pin' | 'weld'; at: Vec; a: number; b: number | 'ground'; mu?: number; radius?: number; pitch?: number; yaw?: number } // pitch/yaw (°): a pin's axis tilted out of the across direction, 3D only
   | { kind: 'rope'; a: number; pa: Vec; b: number | 'ground'; pb: Vec }
@@ -24,7 +25,7 @@ export type SJoint = (
   | { kind: 'floor'; a: number; at: Vec; y: number; mu?: number } // the body point at `at` can't go below height y (a track or the ground to land on); mu: friction there
   | { kind: 'spring'; a: number; at: Vec; anchor: Vec; k: number; rest: number } // spring from the body point to a ground anchor
   | { kind: 'cam'; a: number; b: number; at: Vec; r0: number; r1: number; span: number; over?: Vec } // drum on body b centered at `at`, its rope holding counterweight a (from a pulley at `over`, if any)
-) & { z?: Depth };
+) & { z?: Depth; spec?: PartSpec }; // spec: material / section / diameter from the part card
 
 export interface Sketch {
   bodies: SBody[];
@@ -284,12 +285,15 @@ export function sanitizeSketch(raw: unknown): Sketch {
   const sk = emptySketch();
   if (!r || typeof r !== 'object') return sk;
   for (const b of Array.isArray(r.bodies) ? (r.bodies as SBody[]) : []) {
+    const n0 = sk.bodies.length;
     const name = String(b?.name ?? 'corpo').slice(0, 40);
     if (b?.kind === 'rod') sk.bodies.push({ kind: 'rod', name, a: vec(b.a), b: vec(b.b), mass: pos(b.mass, 10), ...depth(b.z) });
     else if (b?.kind === 'disk') {
       const role = b.role === 'projectile' || b.role === 'counterweight' ? b.role : undefined;
       sk.bodies.push({ kind: 'disk', name, c: vec(b.c), r: pos(b.r, 0.1), mass: pos(b.mass, 10), ...(role ? { role } : {}), ...depth(b.z) });
     }
+    const spec = sanitizeSpec((b as { spec?: unknown })?.spec);
+    if (spec && sk.bodies.length > n0) sk.bodies[n0].spec = spec;
   }
   const n = sk.bodies.length;
   const idx = (v: unknown) => (Number.isInteger(v) && (v as number) >= 0 && (v as number) < n ? (v as number) : -1);
@@ -331,6 +335,8 @@ export function sanitizeSketch(raw: unknown): Sketch {
     if (sk.joints.length > n0) {
       const out = sk.joints[n0];
       Object.assign(out, depth(j.z));
+      const spec = sanitizeSpec((j as { spec?: unknown }).spec);
+      if (spec) out.spec = spec;
       const mu = num((j as { mu?: unknown }).mu, 0); // wheels' rolling resistance / a landing floor's friction
       if ((out.kind === 'slider' || out.kind === 'roller' || out.kind === 'floor') && mu > 0) out.mu = Math.min(1, mu);
     }
