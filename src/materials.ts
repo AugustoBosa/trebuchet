@@ -66,7 +66,8 @@ export const BAR_MATS: Record<string, BarMat> = {
 export const METALS = Object.keys(BAR_MATS).filter((k) => BAR_MATS[k].metal);
 // materials of designs saved before this table (EN 338 classes, S235/S355): the nearest one here
 export const MAT_ALIAS: Record<string, string> = { c24: 'pinus-elliottii', d30: 'cupiuba', d40: 'euc-citriodora', al: 'al-6061', s235: 'aco-a36', s355: 'aco-1045' };
-export const barMat = (k: string | undefined, fallback = 'cupiuba') => BAR_MATS[MAT_ALIAS[k ?? ''] ?? k ?? ''] ?? BAR_MATS[fallback];
+export const DEF_BAR = 'euc-citriodora'; // a bar with no material chosen
+export const barMat = (k: string | undefined, fallback = DEF_BAR) => BAR_MATS[MAT_ALIAS[k ?? ''] ?? k ?? ''] ?? BAR_MATS[fallback];
 
 // ropes: breaking load ≈ σᵤ·πd²/4 on the nominal diameter (12 mm: sisal ~9 kN, PP ~19 kN, nylon ~28 kN, steel 6×19 ~85 kN)
 export const ROPE_MATS: Record<string, { label: string; su: number }> = {

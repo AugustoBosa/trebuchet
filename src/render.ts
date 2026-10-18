@@ -49,8 +49,9 @@ export function flightPos(r: Result, t: number): Vec {
   return r.flight[Math.min(r.flight.length - 1, Math.round((t - r.release!.t) / 1e-3))];
 }
 
-// hl: keys of the selected part (b:i body, j:i joint, s:i spring, p:i crew pull), drawn in the accent color
-export function drawMachine(c: HTMLCanvasElement, m: Mechanism, r: Result, t: number, b: Bounds, hl?: Set<string>): View {
+// hl: keys of the selected part (b:i body, j:i joint, s:i spring, p:i crew pull), drawn in the accent color;
+// broken: the part that failed (red, with a ring where a bar cracked: body + local x)
+export function drawMachine(c: HTMLCanvasElement, m: Mechanism, r: Result, t: number, b: Bounds, hl?: Set<string>, broken?: { keys: Set<string>; body?: number; x?: number }): View {
   const { g, w, h } = fitCanvas(c);
   const v = view(w, h, b);
   const { line, disk } = painter(g, v);
@@ -58,8 +59,10 @@ export function drawMachine(c: HTMLCanvasElement, m: Mechanism, r: Result, t: nu
   const accent = css('--accent');
   const muted = css('--muted');
   const span = b.x1 - b.x0;
-  const on = (k: string) => !!hl?.has(k);
-  const tint = (k: string, base: string) => (on(k) ? accent : base);
+  const danger = css('--danger');
+  const bad = (k: string) => !!broken?.keys.has(k);
+  const on = (k: string) => !!hl?.has(k) || bad(k);
+  const tint = (k: string, base: string) => (bad(k) ? danger : on(k) ? accent : base);
   const wide = (k: string, w: number) => (on(k) ? w + 2 : w);
   g.clearRect(0, 0, w, h);
   g.lineCap = 'round';
@@ -120,7 +123,7 @@ export function drawMachine(c: HTMLCanvasElement, m: Mechanism, r: Result, t: nu
   const proj: Vec = released ? flightPos(r, t) : [f.q[3 * m.projectile], f.q[3 * m.projectile + 1]];
   if (sling.kind === 'rope' && !released) {
     const other = sling.a === m.projectile ? { b: sling.b, p: sling.pb } : { b: sling.a as number | 'ground', p: sling.pa };
-    line(other.b === 'ground' ? other.p : world(f.q, other.b, other.p), proj, accent, wide(`j:${m.sling}`, 2));
+    line(other.b === 'ground' ? other.p : world(f.q, other.b, other.p), proj, tint(`j:${m.sling}`, accent), wide(`j:${m.sling}`, 2));
   }
   m.bodies.forEach((bd, i) => {
     if (bd.shape.kind === 'disk' && i !== m.projectile) disk(world(f.q, i, [0, 0]), bd.shape.radius, tint(`b:${i}`, ink));
@@ -128,10 +131,11 @@ export function drawMachine(c: HTMLCanvasElement, m: Mechanism, r: Result, t: nu
   const ps = m.bodies[m.projectile].shape;
   disk(proj, ps.kind === 'disk' ? ps.radius : 0.1, accent);
   if (on(`b:${m.projectile}`)) ring(proj, ps.kind === 'disk' ? ps.radius : 0.1);
+  if (broken?.body !== undefined) ring(world(f.q, broken.body, [broken.x ?? 0, 0]), 0, danger);
   return v;
 
-  function ring(p: Vec, rad = 0) {
-    g.strokeStyle = accent;
+  function ring(p: Vec, rad = 0, color = accent) {
+    g.strokeStyle = color;
     g.lineWidth = 2;
     g.beginPath(); g.arc(...v.P(p), Math.max(3, rad * v.s) + 6, 0, 2 * Math.PI); g.stroke();
   }

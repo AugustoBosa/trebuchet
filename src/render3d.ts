@@ -39,6 +39,12 @@ export function createView3d(canvas: HTMLCanvasElement) {
   const flightMat = new THREE.LineDashedMaterial({ dashSize: 1, gapSize: 1 });
   const nodeMat = new THREE.MeshBasicMaterial({ depthTest: false, transparent: true, opacity: 0.85 }); // nodes stay visible inside parts
   const hlMat = new THREE.MeshStandardMaterial({ roughness: 0.4, emissiveIntensity: 0.35 }); // the selected part
+  const badMat = new THREE.MeshStandardMaterial({ roughness: 0.4, emissiveIntensity: 0.5 }), badWire = new THREE.LineBasicMaterial(); // a part that broke
+  const crack = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8), badMat); // where it broke
+  crack.visible = false;
+  crack.renderOrder = 2;
+  let broken: { keys: Set<string>; t: number; body?: number; x?: number } | undefined;
+  let showBroken = false;
   let built: { m: Mechanism3; r: Result3; group: THREE.Group; machine: THREE.Group; update: (q: Float64Array, t: number) => void } | undefined;
   let span0 = 0;
   let shown: { q: Float64Array; t: number } | undefined; // the pose on screen
@@ -134,7 +140,7 @@ export function createView3d(canvas: HTMLCanvasElement) {
   const marker = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8), new THREE.MeshBasicMaterial({ depthTest: false }));
   marker.visible = false;
   marker.renderOrder = 2;
-  scene.add(planeGrid, marker);
+  scene.add(planeGrid, marker, crack);
   canvas.addEventListener('pointerdown', (e) => {
     const rc = canvas.getBoundingClientRect();
     const ndc = new THREE.Vector2(((e.clientX - rc.left) / rc.width) * 2 - 1, -((e.clientY - rc.top) / rc.height) * 2 + 1);
@@ -175,7 +181,7 @@ export function createView3d(canvas: HTMLCanvasElement) {
       if (!key) return;
       o.userData.mat ??= obj.material;
       const isLine = (o as THREE.Line).isLine;
-      obj.material = hl.has(key) ? (isLine ? wire.accent : hlMat) : o.userData.mat;
+      obj.material = showBroken && broken!.keys.has(key) ? (isLine ? badWire : badMat) : hl.has(key) ? (isLine ? wire.accent : hlMat) : o.userData.mat;
     });
   }
 
@@ -356,6 +362,7 @@ export function createView3d(canvas: HTMLCanvasElement) {
       nodeMat.color.set(css('--accent'));
       hlMat.color.set(css('--accent'));
       hlMat.emissive.set(css('--accent'));
+      badMat.color.set(css('--danger')), badMat.emissive.set(css('--danger')), badWire.color.set(css('--danger'));
       if (built?.m !== m || built.r !== r) {
         if (built) scene.remove(built.group), built.group.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
         built = build(m, r, b);
@@ -365,7 +372,15 @@ export function createView3d(canvas: HTMLCanvasElement) {
       const dtF = r.frames.length > 1 ? r.frames[1].t - r.frames[0].t : 1;
       shown = { q: r.frames[Math.min(r.frames.length - 1, Math.round(t / dtF))].q, t };
       built.update(shown.q, t);
+      const now = !!broken && t >= broken.t - 1e-9;
+      if (now !== showBroken) (showBroken = now), paint();
+      crack.visible = now && broken!.body !== undefined;
+      if (crack.visible) crack.position.set(...world(shown.q, broken!.body!, [broken!.x ?? 0, 0, 0])).applyAxisAngle(new THREE.Vector3(0, 1, 0), m.aim ?? 0), crack.scale.setScalar(0.012 * (span0 || 10));
       render();
+    },
+    // the part that breaks at time t (red from then on; a ball where a bar cracks), or undefined
+    setBroken(b: { keys: string[]; t: number; body?: number; x?: number } | undefined) {
+      broken = b && { ...b, keys: new Set(b.keys) };
     },
     // The machine's solid parts in its cocked pose (stone in place), for CAD or a 3D printer: glTF binary in meters,
     // or binary STL in millimeters (STL has no units; CAD and slicers read mm). Ropes, flight path, grid, nodes left out.

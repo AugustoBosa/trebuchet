@@ -6,7 +6,8 @@ import { G, type Mechanism, type Vec } from './physics/model';
 import { initialState, simulate, type Result } from './physics/solver';
 import { build, defaults, defaultsFor, geometry, KINDS, type Kind, type Params } from './presets';
 import { drawFlight, drawMachine, partAt, world, type Bounds, type View } from './render';
-import { mechToSketch, presetOwner, presetParts, sketchParts, type Part, type Spec } from './parts';
+import { checksFor, mechToSketch, presetOwner, presetParts, sketchParts, type Checks, type Part, type Spec } from './parts';
+import { byPart, MODE_LABEL, type Check, type Mode } from './structure';
 import type { View3d } from './render3d';
 import { apply3d, lift } from './physics3d/lift';
 import { add, rotate, type Mechanism3 } from './physics3d/model3';
@@ -91,9 +92,9 @@ function mechanismOrError(): Mechanism | undefined {
 // kJ for full-size machines, J for tabletop ones
 const joules = (j: number) => (Math.abs(j) < 1000 ? `${j.toFixed(1)} J` : `${(j / 1000).toFixed(2)} kJ`);
 
-function stats(r: Result, m: Mechanism, lateral?: number) {
+function stats(r: Result, m: Mechanism, lateral?: number, broke?: boolean) {
   const items: [string, string][] = [
-    ['Alcance', `${r.range.toFixed(1)} m`],
+    ['Alcance', broke ? '0 m<small>quebrou</small>' : `${r.range.toFixed(1)} m`],
     ...(lateral === undefined ? [] : [['Desvio lateral', `${lateral.toFixed(2)} m`] as [string, string]]),
     ['Eficiência', r.inputEnergy > 0 ? `${(r.efficiency * 100).toFixed(1)} %` : '—'],
     ['Velocidade de saída', `${r.release?.speed.toFixed(1) ?? '—'} m/s`],
@@ -106,8 +107,20 @@ function stats(r: Result, m: Mechanism, lateral?: number) {
   $('stats').innerHTML = items.map(([k, v]) => `<div class="stat"><span>${k}</span><b>${v}</b></div>`).join('');
 }
 
-function physicsPanel(r: Result, m: Mechanism) {
-  if (!r.release || r.inputEnergy <= 0) return void ($('physics').innerHTML = '');
+const PART_NAME: Record<string, string> = { arm: 'Braço', axle: 'Eixo', frame: 'Pórtico', hanger: 'Haste do contrapeso', sling: 'Funda', string: 'Corda', cam: 'Corda do contrapeso', leg: 'Perna' };
+// every checked part: its critical check and safety factor under both criteria, side by side
+function structureTable(a: Checks | undefined) {
+  if (!a) return '';
+  const rup = byPart(a.rupture), des = byPart(a.design), mode = breakMode();
+  const fs = (c: Check | undefined, on: boolean) => `<td class="n${c && c.u > 1 ? ' fail' : ''}${on ? ' on' : ''}">${c ? (1 / c.u).toFixed(2).replace('.', ',') : '—'}</td>`;
+  const rows = [...rup.keys()].map((id) => `<tr><td>${PART_NAME[id] ?? id}</td><td>${esc(rup.get(id)!.label.replace(/^[^:]+: /, ''))}</td>${fs(rup.get(id), mode === 'rupture')}${fs(des.get(id), mode === 'design')}</tr>`);
+  return `<h2>Estrutura: fator de segurança</h2>
+    <table class="fs"><thead><tr><th>Peça</th><th>Verificação crítica (ruptura)</th><th>Ruptura</th><th>Projeto (NBR)</th></tr></thead><tbody>${rows.join('')}</tbody></table>
+    <p class="muted">FS = resistência ÷ esforço; abaixo de 1, a peça quebra nesse critério${mode ? ` (ativo: ${MODE_LABEL[mode].toLowerCase()})` : '. Ligue a quebra ao lado de Disparar para o disparo parar quando quebrar'}. Pórtico e haste só entram com material e seção escolhidos na ficha. Detalhes na ficha de cada peça.</p>`;
+}
+
+function physicsPanel(r: Result, m: Mechanism, checks?: Checks) {
+  if (!r.release || r.inputEnergy <= 0) return void ($('physics').innerHTML = structureTable(checks));
   const kj = joules;
   const mp = m.bodies[m.projectile].mass;
   const source = [m.counterweight !== undefined && 'queda do contrapeso M·g·Δh', m.pulls?.length && 'trabalho da equipe F·s', m.springs?.length && 'energia das molas ½k·x²'].filter(Boolean).join(' + ');
@@ -123,7 +136,7 @@ function physicsPanel(r: Result, m: Mechanism) {
       <li>Perdas por atrito, ar e impactos (trancos da funda, peças que se chocam): <b>${kj(r.dissipated)}</b>. O resto ficou nas outras peças em movimento.</li>
       ${ratios.length ? `<li>${ratios.join(', ')}</li>` : ''}
       <li>Alcance ideal (η = 100%, sem ar, do chão a 45°): R = 2E/(m·g) = <b>${ideal.toFixed(0)} m</b>. O real é <b>${r.range.toFixed(0)} m</b> (${((100 * r.range) / ideal).toFixed(0)}% do ideal).</li>
-    </ul>`;
+    </ul>${structureTable(checks)}`;
 }
 
 const PALETTE = ['--series-1', '--series-2', '--series-3'];
@@ -161,7 +174,11 @@ function dataTable(specs: ChartSpec[]) {
 const chartEls = ['chart-energy', 'chart-speed', 'chart-force'].map((id) => $<HTMLCanvasElement>(id));
 let raf = 0;
 // 3D view: the shot comes from the 3D solver (m3, r3); r is its planar shadow for the stats and charts
-let current: { m: Mechanism; r: Result; b: Bounds; specs: ChartSpec[]; m3?: Mechanism3; r3?: Result3; sketch?: string } | undefined;
+let current: { m: Mechanism; r: Result; b: Bounds; specs: ChartSpec[]; m3?: Mechanism3; r3?: Result3; sketch?: string; checks?: Checks; fail?: Broken } | undefined;
+// the part that broke in the shot on screen: red from t on (a ring where a bar cracked)
+type Broken = { check: Check & { fail: NonNullable<Check['fail']> }; t: number; body?: number; x?: number };
+const breakMode = () => ($<HTMLSelectElement>('break').value || undefined) as Mode | undefined;
+const brokenAt = (t: number) => (current?.fail && t >= current.fail.t - 1e-9 ? { keys: new Set([current.fail.check.key]), body: current.fail.body, x: current.fail.x } : undefined);
 let lastT = 0;
 
 const is3d = () => !!view3d && !machine3d.hidden;
@@ -264,7 +281,7 @@ function drawAt(t: number) {
   const { m, r, b, specs, m3, r3 } = current;
   machine.dataset.mode = 'play';
   if (view3d && m3 && r3) view3d.draw(m3, r3, t, b);
-  else playView = drawMachine(machine, m, r, t, b, hlKeys);
+  else playView = drawMachine(machine, m, r, t, b, hlKeys, brokenAt(t));
   drawFlight($('flight'), r, t, b.x0);
   specs.forEach((s, i) => drawChart(chartEls[i], s, Math.min(t, s.t.at(-1)!)));
 }
@@ -272,7 +289,10 @@ function drawAt(t: number) {
 function design(): Design {
   const d: Design = { version: 1, name: $<HTMLInputElement>('name').value || 'Sem nome', kind: kindSel.value as Kind | 'free', params: { ...params } };
   if (isFree()) d.sketch = editor.get();
-  else if (Object.keys(spec).length) d.spec = spec;
+  else {
+    if (Object.keys(spec).length) d.spec = spec;
+    if (breakMode()) d.breakMode = breakMode();
+  }
   return d;
 }
 
@@ -297,7 +317,7 @@ function partsNow(): Part[] {
     return sketchParts({ sk, m, r: fresh ? r : undefined }).map((p) => (fresh || !r ? p : { ...p, note: 'Dispare de novo para ver as verificações com o esboço atual.' }));
   }
   try {
-    return presetParts({ kind: kindSel.value as Kind, p: params, spec, m: build(kindSel.value as Kind, params), r });
+    return presetParts({ kind: kindSel.value as Kind, p: params, spec, m: build(kindSel.value as Kind, params), r, a: current?.checks });
   } catch {
     return [];
   }
@@ -545,7 +565,10 @@ function run() {
   }
   saveCurrent(design());
   const id = ++runId;
-  if (!is3d()) return show(m, simulate(m, { afterRelease: 1.5 }));
+  if (!is3d()) return show(m, simulate(m, { afterRelease: 1.5, loadEvery: 2 }));
+  // the 3D view checks the structure with the planar shot's internal forces (same machine; the 3D solver matches it in
+  // the plane). ponytail: out-of-plane bending (pin offset, crosswind) left out
+  const loads = isFree() ? undefined : simulate(m, { afterRelease: 0, frameEvery: 1e9, loadEvery: 2 }).loads;
   let m3: Mechanism3;
   try {
     m3 = mechanism3(m);
@@ -556,7 +579,7 @@ function run() {
   sim3(m3).then((r3) => {
     if (id !== runId) return; // a newer shot was asked for meanwhile
     $('node3d').textContent = '';
-    show(m, planar(r3), m3, r3);
+    show(m, { ...planar(r3), loads }, m3, r3);
   });
 }
 
@@ -629,12 +652,19 @@ $('disp3d').addEventListener('click', async () => {
 
 function show(m: Mechanism, r: Result, m3?: Mechanism3, r3?: Result3) {
   if (r.error) $('err').textContent = r.error;
-  stats(r, m, r3?.lateral);
-  physicsPanel(r, m);
-  current = { m, r, b: bounds(), specs: chartSpecs(r, m), m3, r3, sketch: isFree() ? shape(editor.get()) : undefined };
+  const checks = isFree() ? undefined : checksFor(m, r, spec);
+  const mode = breakMode(), f = mode ? checks?.[mode].failure : undefined;
+  const fail: Broken | undefined = f && { check: f, t: f.fail.t, ...(f.key.startsWith('b:') ? { body: +f.key.slice(2), x: f.fail.x } : {}) };
+  stats(r, m, r3?.lateral, !!fail);
+  physicsPanel(r, m, checks);
+  const broke = $('broke');
+  broke.hidden = !fail;
+  broke.textContent = fail ? `Falha estrutural, critério de ${mode === 'rupture' ? 'ruptura' : 'projeto (NBR)'}: ${fail.check.label.toLowerCase()} em t = ${fail.t.toFixed(3).replace('.', ',')} s. ${fail.check.fail.detail}. O disparo para aqui; reforce a peça na ficha (clique nela).` : '';
+  current = { m, r, b: bounds(), specs: chartSpecs(r, m), m3, r3, sketch: isFree() ? shape(editor.get()) : undefined, checks, fail };
+  view3d?.setBroken(fail && { keys: [fail.check.key], t: fail.t, body: fail.body, x: fail.x });
   dataTable(current.specs);
   renderInspector();
-  const flightTime = r.release ? r.release.t + (r.flight.length - 1) * 1e-3 : r.frames.at(-1)!.t;
+  const flightTime = fail ? fail.t : r.release ? r.release.t + (r.flight.length - 1) * 1e-3 : r.frames.at(-1)!.t;
   const speed = Number($<HTMLSelectElement>('speed').value);
   const start = performance.now();
   const tick = (now: number) => {
@@ -681,6 +711,7 @@ kindSel.addEventListener('change', () => {
   else run();
 });
 $('run').addEventListener('click', run);
+$('break').addEventListener('change', run);
 $('info-btn').addEventListener('click', () => $<HTMLDialogElement>('info-dlg').showModal());
 $('to-free').addEventListener('click', () => {
   const m = mechanismOrError();
@@ -711,6 +742,7 @@ function load(d: Design) {
   kindSel.value = d.kind;
   Object.assign(params, d.params);
   spec = d.spec ?? {};
+  $<HTMLSelectElement>('break').value = d.breakMode ?? '';
   selPart = undefined;
   $<HTMLInputElement>('name').value = d.name;
   if (d.kind === 'free') editor.set(d.sketch ?? emptySketch());

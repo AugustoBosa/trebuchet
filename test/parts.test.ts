@@ -54,11 +54,11 @@ describe('fichas dos presets', () => {
     const spec: Spec = {};
     const arm = presetParts({ kind: 'fixed', p, spec, m }).find((pt) => pt.id === 'arm')!;
     const row = (label: string) => arm.rows.find((x) => x.label.startsWith(label))!.input!;
-    (row('Material') as { set: (v: string) => void }).set('c24');
+    (row('Material') as { set: (v: string) => void }).set('pinus-elliottii');
     (row('Seção: largura') as { set: (v: number) => void }).set(15);
     (row('Seção: altura') as { set: (v: number) => void }).set(25);
-    expect(spec.arm).toEqual({ mat: 'c24', b: 0.15, h: 0.25 });
-    expect(p.armMass).toBeCloseTo(BAR_MATS.c24.rho * 0.15 * 0.25 * (p.longArm + p.shortArm), 2);
+    expect(spec.arm).toEqual({ mat: 'pinus-elliottii', shape: 'rect', b: 0.15, h: 0.25 });
+    expect(p.armMass).toBeCloseTo(BAR_MATS['pinus-elliottii'].rho * 0.15 * 0.25 * (p.longArm + p.shortArm), 2);
   });
 
   it('braço com seção fixada: alongar o braço pela ficha aumenta a massa na mesma proporção', () => {
@@ -66,7 +66,7 @@ describe('fichas dos presets', () => {
     const spec: Spec = { arm: { mat: 'd30', b: 0.1, h: 0.2 } };
     const arm = presetParts({ kind: 'fixed', p, spec, m }).find((pt) => pt.id === 'arm')!;
     (arm.rows.find((x) => x.label.startsWith('Braço longo'))!.input as { set: (v: number) => void }).set(6);
-    expect(p.armMass).toBeCloseTo(640 * 0.1 * 0.2 * (6 + p.shortArm), 2);
+    expect(p.armMass).toBeCloseTo(BAR_MATS.cupiuba.rho * 0.1 * 0.2 * (6 + p.shortArm), 2); // 'd30' (saved before the Brazilian table) reads as cupiúba
   });
 
   it('contrapeso: trocar o material muda só a densidade (mesma massa)', () => {
@@ -99,7 +99,7 @@ describe('fichas do editor livre', () => {
     (part.rows.find((x) => x.label.startsWith('Seção: altura'))!.input as { set: (v: number) => void }).set(10);
     const b = sk.bodies[i];
     if (b.kind !== 'rod') throw new Error();
-    expect(b.mass).toBeCloseTo(640 * 0.01 * Math.hypot(b.a[0] - b.b[0], b.a[1] - b.b[1]), 2);
+    expect(b.mass).toBeCloseTo(BAR_MATS['euc-citriodora'].rho * 0.01 * Math.hypot(b.a[0] - b.b[0], b.a[1] - b.b[1]), 2); // default material
   });
 
   it('sanitizeSpec descarta material desconhecido e tamanhos absurdos', () => {
@@ -151,5 +151,32 @@ describe('ficha: efeitos colaterais e limites', () => {
     const fs = sling.rows.find((x) => x.label === 'Fator de segurança')!;
     expect(fs.status).toBe('warn');
     expect(fs.value).toMatch(/atenção \(1–5\)/);
+  });
+});
+
+describe('ficha com a verificação estrutural', () => {
+  it('com as cargas do disparo, cada peça mostra FS nos dois critérios', () => {
+    const p = defaultsFor('hinged');
+    const m = build('hinged', p);
+    const r = simulate(m, { loadEvery: 2 });
+    const spec: Spec = { frame: { mat: 'euc-citriodora', shape: 'rect', b: 0.1, h: 0.1 }, hanger: { mat: 'aco-1020', shape: 'round', d: 0.03 } };
+    const parts = presetParts({ kind: 'hinged', p, spec, m, r });
+    for (const [id, label] of [['arm', 'Braço: flexão + normal'], ['axle', 'Pórtico: flambagem (perna de trás)'], ['hanger', 'Haste: tração'], ['sling', 'Funda: tração']]) {
+      const row = parts.find((pt) => pt.id === id)!.rows.find((x) => x.label === label);
+      expect(row?.value, `${id} ${label}`).toMatch(/^FS .* ruptura · .* projeto$/);
+    }
+  });
+
+  it('bitola comercial preenche forma e medidas', () => {
+    const p = defaultsFor('hinged');
+    const spec: Spec = {};
+    const arm = presetParts({ kind: 'hinged', p, spec, m: build('hinged', p) }).find((pt) => pt.id === 'arm')!;
+    (arm.rows.find((x) => x.label === 'Bitola comercial')!.input as { set: (v: string) => void }).set('Viga 6 × 16 cm');
+    expect(spec.arm).toMatchObject({ shape: 'rect', b: 0.06, h: 0.16 });
+    expect(p.armMass).toBeCloseTo(BAR_MATS['euc-citriodora'].rho * 0.06 * 0.16 * (p.longArm + p.shortArm), 2);
+  });
+
+  it('sanitizeSpec aceita forma, parede e carga de catálogo; troca nomes antigos', () => {
+    expect(sanitizeSpec({ mat: 'd40', shape: 'rtube', b: 0.05, h: 0.05, t: 0.002, F: 9000 })).toEqual({ mat: 'euc-citriodora', shape: 'rtube', b: 0.05, h: 0.05, t: 0.002, F: 9000 });
   });
 });

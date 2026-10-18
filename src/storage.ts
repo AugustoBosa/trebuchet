@@ -10,6 +10,7 @@ export interface Design {
   params: Params;
   sketch?: Sketch; // only for kind 'free'
   spec?: Spec; // presets: material / section of each part (part card), by part id
+  breakMode?: 'rupture' | 'design'; // presets: parts break past this criterion (absent: they never break)
 }
 
 const KEY = 'trebuchet.designs';
@@ -47,7 +48,8 @@ export function sanitize(raw: unknown): Design {
     const s = sanitizeSpec(v);
     if (s && /^[a-z]{2,8}$/.test(id)) spec[id] = s;
   }
-  return { version: 1, name, kind: d.kind, params, ...(Object.keys(spec).length ? { spec } : {}) };
+  const breakMode = d.breakMode === 'rupture' || d.breakMode === 'design' ? d.breakMode : undefined;
+  return { version: 1, name, kind: d.kind, params, ...(Object.keys(spec).length ? { spec } : {}), ...(breakMode ? { breakMode } : {}) };
 }
 
 export const listDesigns = (): Design[] => read<unknown[]>(KEY, []).flatMap((d) => {

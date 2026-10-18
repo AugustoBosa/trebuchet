@@ -6,23 +6,15 @@ import type { Mechanism, Vec } from './physics/model';
 import type { Result } from './physics/solver';
 import { KINDS, type Kind, type Params } from './presets';
 import type { SBody, SJoint, Sketch } from './sketch';
+import { BAR_MATS, barMat, DEF_BAR, hasSection, MAT_ALIAS, METALS, ROPE_MATS, section, sizesFor, type PartSpec, type Shape } from './materials';
+import { assess, ropeBreaking, type Assessment } from './structure';
+export { BAR_MATS, ROPE_MATS, type PartSpec };
 
-// --- materials (typical characteristic values; a hand check, not a design code) ---
-// bars: EN 338 timber classes (mean density, bending strength f_m,k), structural steel and aluminium (yield)
-export const BAR_MATS: Record<string, { label: string; rho: number; f: number }> = {
-  c24: { label: 'Madeira C24 (pinho)', rho: 420, f: 24e6 },
-  d30: { label: 'Madeira D30 (carvalho)', rho: 640, f: 30e6 },
-  d40: { label: 'Madeira D40 (eucalipto)', rho: 660, f: 40e6 },
-  al: { label: 'Alumínio 6061-T6', rho: 2700, f: 240e6 },
-  s235: { label: 'Aço S235', rho: 7850, f: 235e6 },
-};
-// ropes: breaking load ≈ su · πd²/4 on the nominal diameter (12 mm: sisal ~9 kN, nylon ~28 kN, steel 6×19 ~85 kN)
-export const ROPE_MATS: Record<string, { label: string; su: number }> = {
-  sisal: { label: 'Sisal / cânhamo', su: 80e6 },
-  poly: { label: 'Poliéster', su: 220e6 },
-  nylon: { label: 'Nylon (poliamida)', su: 250e6 },
-  steel: { label: 'Cabo de aço 6×19', su: 750e6 },
-  dyneema: { label: 'Dyneema (UHMWPE)', su: 800e6 },
+// --- materials: bars, ropes and axle pins come from materials.ts (Brazilian woods, steels, aluminium) ---
+const DEF_PIN = 'aco-a36';
+const matKey = (k: string | undefined, def: string) => {
+  const kk = MAT_ALIAS[k ?? ''] ?? k;
+  return kk && Object.hasOwn(BAR_MATS, kk) ? kk : def;
 };
 export const CW_MATS: Record<string, { label: string; rho: number }> = {
   water: { label: 'Água (tanque)', rho: 1000 },
@@ -38,13 +30,6 @@ export const PROJ_MATS: Record<string, { label: string; rho: number }> = {
   iron: { label: 'Ferro fundido', rho: 7200 },
   lead: { label: 'Chumbo', rho: 11300 },
 };
-// axle pins in double shear: τ_max = (4/3)·(F/2)/(πr²) against f_v = f_y/√3
-export const AXLE_MATS: Record<string, { label: string; fy: number }> = {
-  s235: { label: 'Aço S235', fy: 235e6 },
-  s355: { label: 'Aço S355', fy: 355e6 },
-};
-
-export type PartSpec = { mat?: string; b?: number; h?: number; d?: number }; // bar section b × h (m), rope or pin diameter d (m)
 export type Spec = Record<string, PartSpec>;
 
 export type Status = 'ok' | 'warn' | 'fail';
@@ -85,51 +70,103 @@ const fsRows = (fs: number, okAt = 2, note?: string): Row[] =>
 
 // Bar material + section rows. Without a stored section, a square one is estimated from the mass (shown as such);
 // editing material or section sets the mass to ρ·b·h·L.
-function barRows(spec: PartSpec, attach: () => void, L: number, mass: number, setMass: (m: number) => void, moment?: number): Row[] {
-  const mat = BAR_MATS[spec.mat ?? 'd30'] ?? BAR_MATS.d30;
-  const estimated = !(spec.b && spec.h);
-  const side = Math.sqrt(mass / (mat.rho * L));
-  const b = spec.b ?? side, h = spec.h ?? side;
-  const apply = () => (attach(), setMass((BAR_MATS[spec.mat ?? 'd30'] ?? BAR_MATS.d30).rho * (spec.b ?? side) * (spec.h ?? side) * L)); // the material chosen now, not when the card was built
+const SHAPES: [Shape, string][] = [['rect', 'Retangular maciça'], ['round', 'Redonda maciça (roliço, barra)'], ['rtube', 'Tubo retangular (metalon)'], ['ctube', 'Tubo redondo']];
+const same = (a: PartSpec, b: PartSpec) => (a.shape ?? 'rect') === (b.shape ?? 'rect') && (['b', 'h', 'd', 't'] as const).every((k) => Math.abs((a[k] ?? 0) - (b[k] ?? 0)) < 1e-6);
+
+// Material + section rows of a bar. Without a stored section the card shows `est` (the arm's: a square one from the
+// mass) and the first edit fixes it; editing material or section sets the mass to ρ·A·L when the bar has one.
+function sectionRows(spec: PartSpec, attach: () => void, o: { def: string; est: PartSpec; L?: number; mass?: number; setMass?: (m: number) => void }): Row[] {
+  const key = matKey(spec.mat, o.def), mat = BAR_MATS[key];
+  const estimated = !hasSection(spec);
+  const eff: PartSpec = estimated ? o.est : spec;
+  const shape = eff.shape ?? 'rect';
+  const fix = () => {
+    if (!hasSection(spec)) for (const k of ['shape', 'b', 'h', 'd', 't'] as const) if (eff[k] !== undefined) (spec as Record<string, unknown>)[k] = eff[k];
+  };
+  const apply = () => (attach(), o.L && o.setMass?.(BAR_MATS[matKey(spec.mat, o.def)].rho * section(spec).A * o.L)); // the material chosen now
+  const hint = estimated ? (o.mass ? 'Estimada pela massa (seção quadrada). Digite para fixar.' : 'Ainda sem seção: esta peça não é verificada. Escolha uma bitola ou digite as medidas.') : undefined;
+  const dim = (k: 'b' | 'h' | 'd' | 't', label: string): Row => ({ label, hint, input: { kind: 'number', value: +((eff[k] ?? 0) * (k === 't' ? 1000 : 100)).toFixed(k === 't' ? 2 : 1), min: 0.5, step: k === 't' ? 0.1 : 0.5, unit: k === 't' ? 'mm' : 'cm', set: (v) => (fix(), (spec[k] = v / (k === 't' ? 1000 : 100)), apply()) } });
+  const sizes = sizesFor(key);
+  const size = sizes.find((z) => same(z.spec, eff));
   const rows: Row[] = [
-    { label: 'Material', input: { kind: 'select', value: spec.mat ?? 'd30', options: sel(BAR_MATS), set: (v) => ((spec.mat = v), (spec.b ??= b), (spec.h ??= h), apply()) } },
-    { label: 'Seção: largura b', hint: estimated ? 'Estimada pela massa (seção quadrada). Digite para fixar.' : undefined,
-      input: { kind: 'number', value: +(b * 100).toFixed(1), min: 0.5, step: 0.5, unit: 'cm', set: (v) => ((spec.b = v / 100), (spec.h ??= h), apply()) } },
-    { label: 'Seção: altura h (no plano do giro)', hint: estimated ? 'Estimada pela massa (seção quadrada). Digite para fixar.' : undefined,
-      input: { kind: 'number', value: +(h * 100).toFixed(1), min: 0.5, step: 0.5, unit: 'cm', set: (v) => ((spec.h = v / 100), (spec.b ??= b), apply()) } },
-    { label: 'Massa pela seção (ρ·b·h·L)', value: `${fmt(mat.rho * b * h * L)} kg${Math.abs(mat.rho * b * h * L - mass) > 0.01 * mass ? ` (atual: ${fmt(mass)} kg)` : ''}` },
+    { label: 'Material', hint: mat.note ? `Valores estimados: ${mat.note}` : undefined, input: { kind: 'select', value: key, options: sel(BAR_MATS), set: (v) => (fix(), (spec.mat = v), apply()) } },
+    { label: 'Bitola comercial', input: { kind: 'select', value: size?.label ?? '', options: [['', 'personalizada'], ...sizes.map((z): [string, string] => [z.label, z.label])], set: (v) => {
+      const z = sizes.find((x) => x.label === v);
+      if (!z) return;
+      for (const k of ['shape', 'b', 'h', 'd', 't'] as const) delete spec[k];
+      Object.assign(spec, z.spec), apply();
+    } } },
+    { label: 'Forma da seção', input: { kind: 'select', value: shape, options: SHAPES, set: (v) => {
+      fix();
+      const dep = section(eff).depth;
+      spec.shape = v as Shape;
+      if ((v === 'round' || v === 'ctube') && !spec.d) spec.d = dep;
+      if ((v === 'rect' || v === 'rtube') && !(spec.b && spec.h)) (spec.b = dep), (spec.h = dep);
+      if ((v === 'rtube' || v === 'ctube') && !spec.t) spec.t = 0.002;
+      apply();
+    } } },
+    ...(shape === 'round' || shape === 'ctube' ? [dim('d', 'Seção: diâmetro')] : [dim('b', 'Seção: largura b'), dim('h', 'Seção: altura h (no plano do giro)')]),
+    ...(shape === 'rtube' || shape === 'ctube' ? [dim('t', 'Seção: espessura da parede')] : []),
   ];
+  if (o.L) {
+    const mm = mat.rho * section(eff).A * o.L;
+    rows.push({ label: 'Massa pela seção (ρ·A·L)', value: `${fmt(mm)} kg${o.mass !== undefined && Math.abs(mm - o.mass) > 0.01 * o.mass ? ` (atual: ${fmt(o.mass)} kg)` : ''}` });
+  }
+  return rows;
+}
+
+// the structural checks of one part under both criteria (structure.ts), worst first
+export type Checks = { rupture: Assessment; design: Assessment };
+function checkRows(a: Checks | undefined, id: string): Row[] {
+  if (!a) return [];
+  return a.rupture.checks.filter((c) => c.id === id).sort((x, y) => y.u - x.u).map((c): Row => {
+    const d = a.design.checks.find((x) => x.id === id && x.label === c.label);
+    const fr = 1 / c.u, fd = d ? 1 / d.u : Infinity;
+    return { label: c.label, value: `FS ${fmt(fr, 2)} ruptura · ${fmt(fd, 2)} projeto`, status: fr < 1 ? 'fail' : fd < 1 ? 'warn' : 'ok', note: `Ruptura: ${c.detail}.${d ? ` Projeto (NBR, cargas × 1,4): ${d.detail}.` : ''}` };
+  });
+}
+
+function barRows(spec: PartSpec, attach: () => void, L: number, mass: number, setMass: (m: number) => void, moment?: number, checks?: Row[]): Row[] {
+  const mat = barMat(matKey(spec.mat, DEF_BAR));
+  const side = Math.sqrt(mass / (mat.rho * L));
+  const rows = sectionRows(spec, attach, { def: DEF_BAR, est: { shape: 'rect', b: side, h: side }, L, mass, setMass });
+  if (checks?.length) return [...rows, ...checks];
   if (moment !== undefined && moment > 0) {
-    const c = barCheck(moment, b, h, mat.f);
+    const W = section(hasSection(spec) ? spec : { shape: 'rect', b: side, h: side }).W, sigma = moment / W;
     rows.push(
-      { label: 'Módulo resistente W = b·h²/6', value: `${fmt(c.W * 1e6, 1)} cm³` },
-      { label: 'Tensão máxima σ = M/W', value: MPa(c.sigma) },
-      { label: `Resistência (${mat.label.split(' (')[0]})`, value: MPa(mat.f) },
-      ...fsRows(c.fs, 2, estimated ? 'Com a seção estimada pela massa: digite b e h reais para uma verificação de verdade.' : undefined),
+      { label: 'Módulo resistente W', value: `${fmt(W * 1e6, 1)} cm³` },
+      { label: 'Tensão máxima σ = M/W', value: MPa(sigma) },
+      { label: `Resistência (${mat.label.split(' (')[0]})`, value: MPa(mat.fm) },
+      ...fsRows(mat.fm / sigma, 2, hasSection(spec) ? undefined : 'Com a seção estimada pela massa: digite b e h reais para uma verificação de verdade.'),
     );
   }
   return rows;
 }
 
-function ropeRows(spec: PartSpec, attach: () => void, force: number | undefined): Row[] {
+function ropeRows(spec: PartSpec, attach: () => void, force: number | undefined, checks?: Row[]): Row[] {
   const mat = ROPE_MATS[spec.mat ?? 'nylon'] ?? ROPE_MATS.nylon;
   const d = spec.d ?? 0.012;
   const rows: Row[] = [
     { label: 'Material da corda', input: { kind: 'select', value: spec.mat ?? 'nylon', options: sel(ROPE_MATS), set: (v) => ((spec.mat = v), attach()) } },
     { label: 'Diâmetro', input: { kind: 'number', value: +(d * 1000).toFixed(1), min: 1, step: 1, unit: 'mm', set: (v) => ((spec.d = v / 1000), attach()) } },
+    { label: 'Carga de ruptura do catálogo (0 = estimar)', hint: 'Do fabricante, para o diâmetro escolhido. Vazio ou 0: estimada por σᵤ·πd²/4.',
+      input: { kind: 'number', value: +((spec.F ?? 0) / 1000).toFixed(2), min: 0, step: 0.1, unit: 'kN', set: (v) => (v > 0 ? (spec.F = v * 1000) : delete spec.F, attach()) } },
   ];
   const c = ropeCheck(force ?? 0, d, mat.su);
-  rows.push({ label: 'Carga de ruptura (≈ σᵤ·πd²/4)', value: kN(c.breaking) });
-  if (force) rows.push({ label: 'Pico de tração', value: kN(force) }, ...fsRows(c.fs, 5));
+  const brk = ropeBreaking(spec);
+  rows.push({ label: spec.F ? 'Carga de ruptura (catálogo)' : 'Carga de ruptura (≈ σᵤ·πd²/4)', value: kN(spec.F ? brk : c.breaking) });
+  if (checks?.length) return [...rows, ...checks];
+  if (force) rows.push({ label: 'Pico de tração', value: kN(force) }, ...fsRows(brk / force, 5));
   return rows;
 }
 
-function pinRows(spec: PartSpec, attach: () => void, r: number, force: number | undefined): Row[] {
-  const mat = AXLE_MATS[spec.mat ?? 's235'] ?? AXLE_MATS.s235;
-  const rows: Row[] = [{ label: 'Material do eixo', input: { kind: 'select', value: spec.mat ?? 's235', options: sel(AXLE_MATS), set: (v) => ((spec.mat = v), attach()) } }];
+function pinRows(spec: PartSpec, attach: () => void, r: number, force: number | undefined, checks?: Row[]): Row[] {
+  const key = matKey(spec.mat, DEF_PIN), mat = BAR_MATS[key];
+  const rows: Row[] = [{ label: 'Material do eixo', input: { kind: 'select', value: key, options: METALS.map((k): [string, string] => [k, BAR_MATS[k].label]), set: (v) => ((spec.mat = v), attach()) } }];
+  if (checks?.length) return [...rows, ...checks];
   if (force) {
-    const c = pinCheck(force, r, mat.fy);
-    rows.push({ label: 'Pico de força no eixo', value: kN(force) }, { label: 'Cisalhamento duplo τ = 4/3·(F/2)/(πr²)', value: MPa(c.tau) }, { label: 'Resistência ao cisalhamento f_y/√3', value: MPa(mat.fy / Math.sqrt(3)) }, ...fsRows(c.fs));
+    const c = pinCheck(force, r, mat.fm);
+    rows.push({ label: 'Pico de força no eixo', value: kN(force) }, { label: 'Cisalhamento duplo τ = 4/3·(F/2)/(πr²)', value: MPa(c.tau) }, { label: 'Resistência ao cisalhamento f_y/√3', value: MPa(mat.fv) }, ...fsRows(c.fs));
   }
   return rows;
 }
@@ -142,7 +179,10 @@ const JOINT_NAME: Record<string, string> = {
 };
 
 // ===================================================================================================== presets
-export interface PresetCtx { kind: Kind; p: Params; spec: Spec; m: Mechanism; r?: Result }
+// a: the shot's structural checks under both criteria; computed here from r.loads when not given
+export interface PresetCtx { kind: Kind; p: Params; spec: Spec; m: Mechanism; r?: Result; a?: Checks }
+export const checksFor = (m: Mechanism, r: Result | undefined, spec: Spec): Checks | undefined =>
+  r?.loads?.length ? { rupture: assess(m, r, spec, 'rupture'), design: assess(m, r, spec, 'design') } : undefined;
 
 // which part every key of the mechanism belongs to
 export function presetOwner(m: Mechanism): Map<string, string> {
@@ -173,6 +213,7 @@ export function presetOwner(m: Mechanism): Map<string, string> {
 
 export function presetParts(c: PresetCtx): Part[] {
   const { kind, p, spec, m, r } = c;
+  const a = c.a ?? checksFor(m, r, spec);
   const fields = KINDS[kind].fields;
   const own = presetOwner(m);
   const keysOf = (id: string) => [...own].filter(([, v]) => v === id).map(([k]) => k);
@@ -197,7 +238,7 @@ export function presetParts(c: PresetCtx): Part[] {
     return { ...row, input: { ...(row.input as Extract<Input, { kind: 'number' }>), set: (v: number) => {
       set(v);
       const s = spec.arm; // an explicit section keeps its mass per meter: a longer arm weighs more
-      if (s?.b && s.h) setArmMass((BAR_MATS[s.mat ?? 'd30'] ?? BAR_MATS.d30).rho * s.b * s.h * (p.longArm + p.shortArm));
+      if (hasSection(s)) setArmMass(BAR_MATS[matKey(s!.mat, DEF_BAR)].rho * section(s!).A * (p.longArm + p.shortArm));
     } } };
   });
   add('arm', 'Braço', [
@@ -206,7 +247,7 @@ export function presetParts(c: PresetCtx): Part[] {
     ...(kind === 'whipper' || kind === 'ka' || kind === 'faka' ? param('cockDeg') : []),
     { label: 'Momento de inércia (centro)', value: `${fmt((m.bodies[arm].mass * L * L) / 12)} kg·m²` },
     ...(r?.peakBending ? [{ label: 'Pico de flexão', value: `${kN(r.peakBending.moment).replace('N', 'N·m')} ${r.peakBending.fromAxle < 0.02 ? 'no eixo' : `a ${fmt(r.peakBending.fromAxle)} m do eixo`}` }] : []),
-    ...barRows(...specOf('arm'), L, m.bodies[arm].mass, setArmMass, r?.peakBending?.moment),
+    ...barRows(...specOf('arm'), L, m.bodies[arm].mass, setArmMass, r?.peakBending?.moment, checkRows(a, 'arm')),
   ], r?.peakBending ? undefined : 'Dispare para ver a verificação de flexão.');
 
   const ax = m.joints[m.axle];
@@ -214,7 +255,13 @@ export function presetParts(c: PresetCtx): Part[] {
   add('axle', axleTitle, [
     ...param('pivotHeight'), ...param('axleLift'), ...param('axleRadius'), ...param('axleMu'),
     ...(ax.kind !== 'pin' && fields.includes('rollCrr') ? param('rollCrr') : []),
-    ...(ax.kind === 'pin' ? pinRows(...specOf('axle'), p.axleRadius, peak(r, m.axle)) : forceRow(peak(r, m.axle))),
+    ...(ax.kind === 'pin' ? pinRows(...specOf('axle'), p.axleRadius, peak(r, m.axle), checkRows(a, 'axle')) : [...forceRow(peak(r, m.axle)), ...checkRows(a, 'axle')]),
+    // the frame: two A-frames under a fixed axle, legs from the axle down to ±0.5·h (as drawn)
+    ...(ax.kind === 'pin' && ax.b === 'ground' ? [
+      { label: 'Pórtico: pernas', value: `4 × ${fmt(p.pivotHeight * Math.sqrt(1.25))} m (2 cavaletes em A)` },
+      ...sectionRows(...specOf('frame'), { def: DEF_BAR, est: { shape: 'rect', b: 0.07, h: 0.07 } }),
+      ...checkRows(a, 'frame'),
+    ] : []),
   ]);
 
   const cw = m.counterweight;
@@ -230,7 +277,8 @@ export function presetParts(c: PresetCtx): Part[] {
     ]);
   }
   const hangI = m.joints.findIndex((_, i) => own.get(`j:${i}`) === 'hanger');
-  add('hanger', 'Haste do contrapeso', [...param('hingeLength'), ...forceRow(peak(r, hangI))]);
+  add('hanger', 'Haste do contrapeso', [...param('hingeLength'), ...forceRow(peak(r, hangI)),
+    ...sectionRows(...specOf('hanger'), { def: 'aco-1020', est: { shape: 'round', d: 0.0254 } }), ...checkRows(a, 'hanger')]);
 
   const ps = shape(m.projectile);
   const V = ps?.kind === 'disk' ? (4 / 3) * Math.PI * ps.radius ** 3 : 0;
@@ -242,16 +290,16 @@ export function presetParts(c: PresetCtx): Part[] {
     ...param('dragCd'), ...param('troughMu'),
   ]);
 
-  add('sling', 'Funda', [...param('slingLength'), ...param('releaseDeg'), ...ropeRows(...specOf('sling'), peak(r, m.sling))]);
+  add('sling', 'Funda', [...param('slingLength'), ...param('releaseDeg'), ...ropeRows(...specOf('sling'), peak(r, m.sling), checkRows(a, 'sling'))]);
   const legI = m.bodies.findIndex((b) => b.name === 'perna');
   if (legI >= 0) {
     const legL = shape(legI)?.kind === 'rod' ? (shape(legI) as { length: number }).length : 0;
-    add('leg', 'Perna', [...param('legLength'), ...param('legMass'), ...barRows(...specOf('leg'), legL, m.bodies[legI].mass, (v) => (p.legMass = clampP('legMass', +v.toFixed(3))))]);
+    add('leg', 'Perna', [...param('legLength'), ...param('legMass'), ...barRows(...specOf('leg'), legL, m.bodies[legI].mass, (v) => (p.legMass = clampP('legMass', +v.toFixed(3))), undefined, checkRows(a, 'leg'))]);
   }
   const strI = m.joints.findIndex((_, i) => own.get(`j:${i}`) === 'string');
-  add('string', kind === 'walking' ? 'Corda de ajuste da perna' : 'Corda', [...(kind === 'walking' ? param('cockDeg') : []), ...ropeRows(...specOf('string'), peak(r, strI))]);
+  add('string', kind === 'walking' ? 'Corda de ajuste da perna' : 'Corda', [...(kind === 'walking' ? param('cockDeg') : []), ...ropeRows(...specOf('string'), peak(r, strI), checkRows(a, 'string'))]);
   const camI = m.joints.findIndex((j) => j.kind === 'cam');
-  add('cam', 'Tambor e corda do contrapeso', [...param('camStart'), ...param('camEnd'), ...param('pulleyHeight'), ...ropeRows(...specOf('cam'), peak(r, camI))]);
+  add('cam', 'Tambor e corda do contrapeso', [...param('camStart'), ...param('camEnd'), ...param('pulleyHeight'), ...ropeRows(...specOf('cam'), peak(r, camI), checkRows(a, 'cam'))]);
   const rolI = m.joints.findIndex((j) => j.kind === 'roller');
   add('roller', 'Rolete', [...param('rollerOffset'), ...param('rollCrr'), ...forceRow(peak(r, rolI))]);
   const guI = m.joints.findIndex((_, i) => own.get(`j:${i}`) === 'guide');
@@ -367,8 +415,10 @@ export function sanitizeSpec(raw: unknown): PartSpec | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
   const s = raw as Record<string, unknown>;
   const out: PartSpec = {};
-  const all = { ...BAR_MATS, ...ROPE_MATS, ...AXLE_MATS };
-  if (typeof s.mat === 'string' && Object.hasOwn(all, s.mat)) out.mat = s.mat;
-  for (const k of ['b', 'h', 'd'] as const) if (typeof s[k] === 'number' && Number.isFinite(s[k]) && (s[k] as number) > 0 && (s[k] as number) < 10) out[k] = s[k] as number;
+  const mat = typeof s.mat === 'string' ? MAT_ALIAS[s.mat] ?? s.mat : undefined; // designs saved with the old names
+  if (mat && (Object.hasOwn(BAR_MATS, mat) || Object.hasOwn(ROPE_MATS, mat))) out.mat = mat;
+  if (s.shape === 'rect' || s.shape === 'round' || s.shape === 'rtube' || s.shape === 'ctube') out.shape = s.shape;
+  for (const k of ['b', 'h', 'd', 't'] as const) if (typeof s[k] === 'number' && Number.isFinite(s[k]) && (s[k] as number) > 0 && (s[k] as number) < 10) out[k] = s[k] as number;
+  if (typeof s.F === 'number' && Number.isFinite(s.F) && s.F > 0 && s.F < 1e8) out.F = s.F;
   return Object.keys(out).length ? out : undefined;
 }

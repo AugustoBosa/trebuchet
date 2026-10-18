@@ -84,6 +84,12 @@
     #inspector .ok b { color: var(--series-3); }
     #inspector .warn b { color: var(--series-2); }
     #inspector .fail b { color: var(--danger); }
+    #broke { color: var(--danger); font-weight: 600; border-left: 3px solid var(--danger); padding: 6px 10px; margin: 8px 0; }
+    table.fs { border-collapse: collapse; width: 100%; font-size: 0.9em; }
+    table.fs th, table.fs td { text-align: left; padding: 3px 6px; border-bottom: 1px solid var(--line); }
+    table.fs td.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    table.fs .fail { color: var(--danger); font-weight: 600; }
+    table.fs .on { outline: 2px solid var(--accent); outline-offset: -2px; }
     #inspector .note { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
     @media (max-width: 800px) { #inspector { position: static; width: auto; max-height: none; box-shadow: none; margin: 0 0 12px; } }
     #tools { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
@@ -221,6 +227,7 @@
       <div class="row">
         <button id="run">Disparar</button>
         <select id="speed" aria-label="Velocidade da animação"><option value="1">1×</option><option value="0.25" selected>¼× câmera lenta</option><option value="0.1">⅒×</option></select>
+        <select id="break" aria-label="Quebra estrutural" title="Com a quebra ligada, uma peça que passa da resistência quebra: o disparo para ali e o alcance vale 0. Ruptura: valores médios (madeira na ruptura, metal no escoamento). Projeto: NBR 7190 / NBR 8800, cargas × 1,4. Materiais e seções na ficha de cada peça."><option value="">Quebra: desligada</option><option value="rupture">Quebra: ruptura</option><option value="design">Quebra: projeto (NBR)</option></select>
       </div>
       <p id="err" role="alert"></p>
       <fieldset>
@@ -273,6 +280,7 @@
       <canvas id="machine3d" role="img" aria-label="Vista 3D da máquina e do disparo. Mouse: arraste para girar, roda para aproximar. Teclado: setas deslocam a câmera, Shift mais setas giram, mais e menos aproximam, 0 recentraliza; em Editar nós, N escolhe o próximo nó, setas e PageUp ou PageDown o movem (Shift: passo fino), Enter confirma, Esc solta. Clique numa peça (sem arrastar) para abrir a ficha dela." height="440" hidden></canvas>
       <aside id="inspector" aria-label="Ficha da peça" hidden></aside>
       </div>
+      <p id="broke" role="alert" hidden></p>
       <div id="stats" role="region" aria-label="Resultados do disparo" aria-live="polite"></div>
       <div id="physics"></div>
       <div class="charts">
