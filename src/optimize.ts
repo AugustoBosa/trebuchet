@@ -3,6 +3,8 @@ import { simulate } from './physics/solver';
 import { apply3d, lift } from './physics3d/lift';
 import { simulate3 } from './physics3d/solver3';
 import { build, type Kind, type Params } from './presets';
+import { barMat, hasSection, section, type PartSpec } from './materials';
+import { assess, type Mode } from './structure';
 
 // 'lateral' and 'robust' need the 3D solver (env3 given)
 export type Objective = 'range' | 'efficiency' | 'lateral' | 'robust';
@@ -15,8 +17,57 @@ const RANGES3 = { pinOffset: [-0.5, 0.5], aimDeg: [-15, 15] } as const; // same 
 // robust range: release ±2° (the pin's timing scatter) and a ±3 m/s tail/head gust around the nominal shot
 const SCENARIOS = [{ dDeg: 0, windX: 0 }, { dDeg: 2, windX: 0 }, { dDeg: -2, windX: 0 }, { dDeg: 0, windX: 3 }, { dDeg: 0, windX: -3 }];
 
+// The parts may not break: material / section per part id (the part card's), criterion, minimum safety factor.
+export interface Struct { spec: Record<string, PartSpec>; mode: Mode; fsMin: number }
+const MARGIN = 1.01; // the search runs at FAST_DT; the full-accuracy shot's peaks differ by a fraction of that
+
+// a bar with a section weighs ρ·A·L: the arm (and the walking arm's leg) follow their length
+export function withSectionMass(p: OptParams, spec: Record<string, PartSpec>): OptParams {
+  const q = { ...p };
+  const mass = (s: PartSpec | undefined, L: number) => (hasSection(s) ? barMat(s!.mat).rho * section(s!).A * L : undefined);
+  q.armMass = Math.min(RANGES.armMass[1], Math.max(RANGES.armMass[0], mass(spec.arm, p.longArm + p.shortArm) ?? p.armMass));
+  q.legMass = Math.min(RANGES.legMass[1], Math.max(RANGES.legMass[0], mass(spec.leg, p.legLength) ?? p.legMass));
+  return q;
+}
+
+// worst utilization of the design's parts (FS = 1/u), from a quick planar shot; Infinity when it doesn't shoot
+export function structU(kind: Kind, p: OptParams, st: Struct): number {
+  try {
+    const m = build(kind, withSectionMass(p, st.spec));
+    const r = simulate(m, { afterRelease: 0, frameEvery: 1e9, dt: FAST_DT, tMax: 4, loadEvery: 1 });
+    return r.error || !r.release ? Infinity : Math.max(0, ...assess(m, r, st.spec, st.mode).checks.map((c) => c.u));
+  } catch {
+    return Infinity;
+  }
+}
+
 // Score to MAXIMIZE, 0 = failed shot. lateral → 1/(1+|drift|), best = 1; shownValue() turns it back into meters.
-export function evaluate(kind: Kind, p: OptParams, objective: Objective, env3?: Env3): number {
+// With st, a design whose parts would break is scored down steeply (×(u·FS_min)⁻⁸): continuous, so the search can
+// still walk back to the edge of what holds. ponytail: a penalty, not a hard constraint; the UI flags what still fails
+export function evaluate(kind: Kind, p: OptParams, objective: Objective, env3?: Env3, st?: Struct): number {
+  if (!st) return score(kind, p, objective, env3);
+  const q = withSectionMass(p, st.spec);
+  let v: number, u: number;
+  if (!env3 && (objective === 'range' || objective === 'efficiency')) {
+    // one planar shot gives both the score and the loads
+    try {
+      const m = build(kind, q);
+      const r = simulate(m, { afterRelease: 0, frameEvery: 1e9, dt: FAST_DT, tMax: 4, loadEvery: 1 });
+      if (r.error || !r.release) return 0;
+      v = objective === 'range' ? r.range : r.efficiency;
+      u = Math.max(0, ...assess(m, r, st.spec, st.mode).checks.map((c) => c.u)) * st.fsMin * MARGIN;
+    } catch {
+      return 0;
+    }
+  } else {
+    v = score(kind, q, objective, env3);
+    if (v <= 0) return v;
+    u = structU(kind, q, st) * st.fsMin * MARGIN;
+  }
+  return u <= 1 ? v : u === Infinity ? 0 : v * u ** -8;
+}
+
+function score(kind: Kind, p: OptParams, objective: Objective, env3?: Env3): number {
   try {
     // tMax 4 s: designs that never release would otherwise burn 8 s of simulation each
     const opts = { afterRelease: 0, frameEvery: 1e9, dt: FAST_DT, tMax: 4 };

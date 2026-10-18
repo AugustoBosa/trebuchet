@@ -132,7 +132,7 @@
     #data-table thead th { position: sticky; top: 0; background: var(--bg); }
     #opt label, #opt label select { min-width: 0; }
     #opt label.chk { display: flex; gap: 6px; font-size: 12px; }
-    #opt-arm-box { margin: 8px 0; padding-top: 6px; border-top: 1px solid var(--line); }
+    #opt-arm-box, #opt-struct-box { margin: 8px 0; padding-top: 6px; border-top: 1px solid var(--line); }
     #opt-help { max-width: min(680px, calc(100vw - 32px)); line-height: 1.5; font-size: 14px; }
     #opt-help h3 { font-size: 15px; margin: 16px 0 4px; }
     #opt-help ol, #opt-help ul { padding-left: 20px; margin: 4px 0; }
@@ -171,6 +171,15 @@
             <label class="chk"><input type="checkbox" id="opt-arm"> Distribuir o braço entre longo e curto</label>
             <label>Comprimento total do braço (m)<input type="number" id="opt-arm-total" step="0.05" min="0.3" max="27" disabled aria-describedby="opt-arm-hint"></label>
             <p class="muted" id="opt-arm-hint"></p>
+          </div>
+          <div id="opt-struct-box">
+            <label class="chk"><input type="checkbox" id="opt-struct"> As peças não podem quebrar</label>
+            <div class="row">
+              <select id="opt-struct-mode" aria-label="Critério de quebra do otimizador"><option value="rupture">critério de ruptura</option><option value="design">critério de projeto (NBR)</option></select>
+              <label>FS mínimo<input type="number" id="opt-fs" value="1" min="1" max="10" step="0.1"></label>
+            </div>
+            <label>Material e seção do braço<select id="opt-mat"><option value="">os da ficha do braço</option><option value="all">varrer todos os materiais e bitolas comerciais</option><option value="wood">varrer só madeiras</option><option value="metal">varrer só metais</option></select></label>
+            <p class="muted">Com uma peça disponível de comprimento fixo, marque também "Distribuir o braço" acima e digite o comprimento dela. Na varredura, cada material × bitola ganha uma otimização própria, e a massa do braço passa a ser ρ·A·L.</p>
           </div>
           <div class="row"><button type="button" id="opt-run">Otimizar</button><button type="button" class="ghost" id="opt-stop" hidden>Parar</button></div>
           <p id="opt-status" class="muted" role="status" aria-live="polite"></p>
@@ -214,6 +223,9 @@
             </ul>
             <h3>Varredura</h3>
             <p>Enquanto o otimizador <i>procura</i>, a varredura <i>desenha o terreno</i>. Escolha o <b>Eixo X</b> (e, se quiser um mapa, o <b>Eixo Y</b>) e clique em <b>Varrer</b>. Com dois eixos você vê um mapa de calor de 16 × 12 pontos; com um só, uma curva de 40 pontos. A faixa vai de 40% a 160% do valor atual (o ângulo vai de 5° a 85°). O contorno marca o melhor ponto, o círculo marca o seu design, e um clique numa célula aplica aqueles valores. Use a varredura para ver se existem vários vales ou se o melhor ponto está numa borda.</p>
+            <h3>Sem quebrar</h3>
+            <p>Marque <b>As peças não podem quebrar</b> para o otimizador respeitar os materiais das fichas das peças: escolha o critério (ruptura, com valores médios, ou projeto, pela NBR) e o FS mínimo. Um design que quebraria perde pontos em proporção a quanto passa do limite, então a busca para na borda do que aguenta. Com uma seção definida, a massa do braço vira ρ·A·L e acompanha o comprimento.</p>
+            <p><b>Uma peça disponível</b> (material X, comprimento Y): marque <b>Distribuir o braço</b> com o comprimento total Y e escolha o material e a bitola na ficha do braço. Para o otimizador escolher também o material, use <b>Material e seção do braço → varrer</b>. Ele faz uma triagem de cada material × bitola comercial com um disparo, otimiza a bitola mais leve que aguenta em cada material e a logo abaixo dela, e lista as melhores. "Aplicar" leva o material, a seção, as medidas e o critério de quebra para o design.</p>
             <button class="ghost">Fechar</button>
           </form>
         </dialog>

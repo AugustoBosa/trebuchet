@@ -16,6 +16,37 @@ Só restam itens que dependem de dados que não existem em fonte pública. Retom
    - **BAKA:** a sigla não é definida em nenhuma fonte.
    - **Fiffer:** a topologia está descrita pelo construtor de um protótipo (vídeo "Fiffer explanation", beardedone85, 2011): viga do contrapeso articulada atrás, duas barras em tesoura empurrando um pino para baixo e para a frente, e uma correia que puxa a ponta curta do braço por um came. Uma reconstrução com proporções estimadas puxava a correia só ~8 cm e travava num ponto morto aos ~41° de queda da viga; um resultado aparentemente bom (~102 m) vinha de energia criada nesse travamento. Falta o arranjo real da tesoura e o raio do came.
 
+## 2026-10-18: materiais brasileiros, quebra estrutural e otimização com uma peça disponível
+
+- **Materiais do Brasil** (`src/materials.ts`). Os valores são médias de ensaio, e as estimativas estão marcadas.
+  - 27 madeiras: 24 do IPT (manual *Madeira: uso sustentável na construção civil*, a 12–15 % de umidade), Ipê e Cumaru (fichas CIRAD Tropix) e Maçaranduba (EN 408).
+  - Aços SAE 1020/metalon, A36, SAE 1045, inox 304; alumínio 6063-T5 e 6061-T6.
+  - Cordas de sisal, polipropileno, poliéster, nylon, cabo de aço e Dyneema.
+  - Os nomes antigos (C24, D30, D40, S235, S355) viram o equivalente brasileiro.
+- **Seções e bitolas comerciais.** Formas: retangular, redonda, tubo retangular e tubo redondo. Bitolas: sarrafo, caibro, pontalete, vigota, viga, pilar, roliço, metalon, tubos e barra. A massa do braço vira ρ·A·L.
+- **Esforços ao longo da barra.** O solver passa a guardar a força normal, a cortante e o momento em 41 seções, mais a reação de cada junta, até a soltura.
+- **Verificação de cada peça** (`src/structure.ts`):
+  - braço e perna: flexão com normal, e cisalhamento;
+  - eixo: cisalhamento duplo, flexão do pino e esmagamento do furo, com a fórmula de Hankinson pelo ângulo da carga com as fibras;
+  - pórtico: compressão, tração e flambagem de Euler das 4 pernas;
+  - haste do contrapeso;
+  - funda e cordas, com campo para a carga de ruptura do catálogo.
+- **Dois critérios lado a lado.**
+  - Ruptura: valores médios.
+  - Projeto: NBR 7190 para madeira (k_mod 0,88, γ 1,4/1,8), NBR 8800 para aço, corda a 1/5 da ruptura, cargas × 1,4.
+  - A ficha mostra o FS nos dois critérios, e uma tabela "Estrutura" no painel de física compara as peças.
+- **Quebra.** O seletor ao lado de Disparar tem três posições: desligada (padrão), ruptura ou projeto. Ele fica salvo no design. Quando uma peça passa do limite:
+  - o disparo para no instante da falha;
+  - a peça fica vermelha no 2D e no 3D, com um anel onde a barra trincou;
+  - o alcance vale 0 e um aviso dá a tensão contra a resistência.
+  - Exemplo: no articulado padrão, o braço de 60 kg em eucalipto citriodora quebra em t = 0,73 s (σ 122 > 121 MPa). Em jatobá 6 × 16 cm ele aguenta na ruptura (FS 1,83), mas não no projeto (FS 0,31).
+- **Otimizador sem quebrar.**
+  - "As peças não podem quebrar" tem critério e FS mínimo, e penaliza designs que quebrariam.
+  - "Varrer materiais" faz uma triagem de cada material × bitola e otimiza, em cada material, a bitola mais leve que aguenta e a logo abaixo. Com "Distribuir o braço" (o comprimento da peça disponível), sai um ranking com o botão Aplicar.
+  - Exemplo: articulado com uma peça de 6,25 m, só madeiras, ruptura. O melhor resultado foi curupixá 6 × 16 cm (47 kg), com 270 m contra 225 m do padrão. Foram 270 combinações na triagem e 54 otimizadas, em 2 min no navegador.
+- Fora desta versão: o trilho dos floating arms e a torre da polia do MURLIN (considerados apoiados), o pórtico em designs livres e os pedaços voando depois da quebra. A vista 3D verifica com as cargas do modelo plano, então a flexão lateral (pino fora do centro, vento) fica de fora.
+- Testes novos: seções, N/V/M em forma fechada, razão entre os critérios, perna do cavalete contra Euler, quebra detectada no braço e otimizador parando no FS mínimo.
+
 ## 2026-10-18: ficha de peça (inspetor estilo BIM), 2D e 3D
 
 - **Clique numa peça** no desenho 2D ou na vista 3D (clique sem arrastar) para abrir a ficha dela. A peça fica destacada nas duas vistas. O botão **Peças** abre a ficha pelo teclado, e a lista no topo da ficha alcança peças sem desenho próprio, como os pinos entre peças no 3D.

@@ -1,6 +1,8 @@
 import { css, drawChart, drawHeatmap, heatCell, timeAt, type ChartSpec, type HeatSpec } from './charts';
 import { LABELS, RANGES } from './labels';
-import { armSplitRange, distinctOptima, evaluate, latinHypercube, paramMapper, shotsPerEval, shownValue, type Env3, type Objective, type OptParams, type OptVar } from './optimize';
+import { armSplitRange, distinctOptima, evaluate, latinHypercube, paramMapper, shotsPerEval, shownValue, withSectionMass, type Env3, type Objective, type OptParams, type OptVar, type Struct } from './optimize';
+import { BAR_MATS, sizesFor, type PartSpec } from './materials';
+import type { Mode } from './structure';
 import type { Reply, Request } from './optimize.worker';
 import { KINDS, type Kind, type Params } from './presets';
 
@@ -13,7 +15,9 @@ const label = (k: keyof OptParams) => (k === 'pinOffset' ? 'Pino fora do centro 
 
 // env3: the 3D conditions while the 3D view is on (then everything runs on the 3D solver), else undefined.
 // apply3d: write optimized 3D settings (pin offset in m, aim in degrees) back to the 3D fields.
-export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p: Partial<Params>) => void; env3: () => Env3 | undefined; apply3d: (v: { pinOffset?: number; aimDeg?: number }) => void }) {
+// spec: the parts' materials (part card); applyArm: set the arm's material + section and the break criterion before apply()
+export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p: Partial<Params>) => void; env3: () => Env3 | undefined; apply3d: (v: { pinOffset?: number; aimDeg?: number }) => void;
+  spec: () => Record<string, PartSpec>; applyArm: (arm: PartSpec | undefined, mode: Mode) => void }) {
   const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
   const sweepCanvas = $<HTMLCanvasElement>('sweep');
   let pool: Worker[] = [];
@@ -94,6 +98,11 @@ export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p:
     status('Interrompido.');
   });
 
+  const struct = (): Struct | undefined => $<HTMLInputElement>('opt-struct').checked || $<HTMLSelectElement>('opt-mat').value
+    ? { spec: { ...o.spec() }, mode: $<HTMLSelectElement>('opt-struct-mode').value as Mode, fsMin: Math.max(1, Number($<HTMLInputElement>('opt-fs').value) || 1) }
+    : undefined;
+  $('opt-mat').addEventListener('change', () => $<HTMLSelectElement>('opt-mat').value && ($<HTMLInputElement>('opt-struct').checked = true));
+
   $('opt-run').addEventListener('click', () => {
     const arm = $<HTMLInputElement>('opt-arm').checked;
     const armTotal = Number($<HTMLInputElement>('opt-arm-total').value);
@@ -111,25 +120,93 @@ export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p:
     const map = paramMapper(base, vars, arm ? armTotal : undefined);
     const kind = o.kind();
     const obj = objective();
+    const st = struct();
+    const sweep = $<HTMLSelectElement>('opt-mat').value;
+    if (sweep && st) return materialSweep(kind, base, vars, obj, st, sweep, arm ? armTotal : undefined, env3);
     const startsU = [map.toUnit(base), ...latinHypercube(STARTS - 1, vars.length)];
-    const reqs: Request[] = startsU.map((u) => ({ type: 'optimize', kind, params: map.toParams(u), vars, objective: obj, maxEvals: 30 + 25 * vars.length, ...(arm ? { armTotal } : {}), ...(env3 ? { env3 } : {}) }));
-    const found: { u: number[]; value: number; params: OptParams }[] = [];
+    const reqs: Request[] = startsU.map((u) => ({ type: 'optimize', kind, params: map.toParams(u), vars, objective: obj, maxEvals: 30 + 25 * vars.length, ...(arm ? { armTotal } : {}), ...(env3 ? { env3 } : {}), ...(st ? { struct: st } : {}) }));
+    const found: { u: number[]; value: number; params: OptParams; fs?: number }[] = [];
     let current = 0;
     let evals = 0;
     status(`Otimizando a partir de ${STARTS} pontos em paralelo…`);
     runPool(reqs, {
       each: (r, i) => {
         if (r.type !== 'optimized') return;
-        if (i === 0) current = arm ? evaluate(kind, base, obj, env3) : r.start; // start 0 is the current design (its arms may be rescaled to the new total)
+        if (i === 0) current = arm ? evaluate(kind, base, obj, env3, st) : r.start; // start 0 is the current design (its arms may be rescaled to the new total)
         evals += r.evals * shotsPerEval(obj);
-        found.push({ u: map.toUnit(r.params), value: r.value, params: r.params });
+        found.push({ u: map.toUnit(r.params), value: r.value, params: r.params, fs: r.fs });
         status(`Otimizando… ${found.length}/${STARTS} partidas concluídas · ${evals} simulações`);
       },
-      done: () => showOptima(vars, distinctOptima(found), current, evals, base, arm ? armTotal : undefined),
+      done: () => showOptima(vars, distinctOptima(found), current, evals, base, arm ? armTotal : undefined, st),
     });
   });
 
-  function showOptima(optVars: OptVar[], all: ReturnType<typeof distinctOptima<{ u: number[]; value: number; params: OptParams }>>, current: number, evals: number, base: OptParams, armTotal?: number) {
+  // Material × commercial size of the arm, ranked by what holds. A quick shot of every pair at the current design
+  // first; then one optimization each for, per material, the lightest size that holds there and the next lighter one
+  // (the found geometry may let it hold). ponytail: two sizes per material, not all of them; widen if it misses
+  function materialSweep(kind: Kind, base: OptParams, vars: OptVar[], obj: Objective, st: Struct, which: string, armTotal: number | undefined, env3: Env3 | undefined) {
+    const mats = Object.keys(BAR_MATS).filter((k) => which === 'all' || (which === 'metal') === !!BAR_MATS[k].metal);
+    const all = mats.flatMap((mat) => sizesFor(mat).map((z) => ({ mat, size: z.label, arm: { mat, ...z.spec } as PartSpec })));
+    const start = armTotal !== undefined ? paramMapper(base, ['armSplit'], armTotal).toParams([base.longArm / (base.longArm + base.shortArm)]) : base; // the piece's length
+    const variant = (arm: PartSpec): Struct => ({ ...st, spec: { ...st.spec, arm } });
+    const n = Math.max(1, (navigator.hardwareConcurrency || 4) - 1), chunk = Math.ceil(all.length / n);
+    const chunks = Array.from({ length: Math.ceil(all.length / chunk) }, (_, i) => all.slice(i * chunk, (i + 1) * chunk));
+    const us: number[] = [];
+    status(`Triagem: ${all.length} combinações de material × bitola, um disparo cada…`);
+    runPool(chunks.map((c): Request => ({ type: 'screen', kind, params: start, structs: c.map((x) => variant(x.arm)) })), {
+      each: (r, i) => r.type === 'screened' && r.u.forEach((u, k) => (us[i * chunk + k] = u)),
+      done: () => {
+        const mass = (x: (typeof all)[number]) => withSectionMass(start, { arm: x.arm }).armMass;
+        const combos = mats.flatMap((mat) => {
+          const list = all.map((x, i) => ({ ...x, u: us[i] })).filter((x) => x.mat === mat).sort((a, b) => mass(a) - mass(b));
+          const k = list.findIndex((x) => x.u * st.fsMin <= 1);
+          return k < 0 ? [] : list.slice(Math.max(0, k - 1), k + 1);
+        });
+        if (!combos.length) return void status(`Nenhuma combinação aguenta com FS ≥ ${st.fsMin} no design atual. Tente FS menor, outro critério ou menos contrapeso.`);
+        optimizeCombos(kind, base, vars, obj, st, combos, armTotal, env3, all.length);
+      },
+    });
+  }
+
+  function optimizeCombos(kind: Kind, base: OptParams, vars: OptVar[], obj: Objective, st: Struct, combos: { mat: string; size: string; arm: PartSpec }[], armTotal: number | undefined, env3: Env3 | undefined, screened: number) {
+    const reqs: Request[] = combos.map((c) => ({ type: 'optimize', kind, params: base, vars, objective: obj, maxEvals: 20 + 15 * vars.length,
+      ...(armTotal !== undefined ? { armTotal } : {}), ...(env3 ? { env3 } : {}), struct: { ...st, spec: { ...st.spec, arm: c.arm } } }));
+    const rows: { c: (typeof combos)[number]; value: number; params: OptParams; fs: number }[] = [];
+    let evals = 0;
+    status(`Varrendo ${combos.length} combinações de material × bitola…`);
+    runPool(reqs, {
+      each: (r, i) => {
+        if (r.type !== 'optimized') return;
+        evals += r.evals * shotsPerEval(obj);
+        rows.push({ c: combos[i], value: r.value, params: r.params, fs: r.fs ?? 0 });
+        status(`Varrendo materiais… ${rows.length}/${combos.length} · ${evals} simulações`);
+      },
+      done: () => {
+        const ok = rows.filter((x) => x.value > 0 && x.fs >= 0.97 * st.fsMin).sort((a, b) => b.value - a.value);
+        const crit = st.mode === 'rupture' ? 'ruptura' : 'projeto (NBR)';
+        if (!ok.length) return void status(`Nenhuma das ${combos.length} combinações aguenta com FS ≥ ${st.fsMin} (${crit}). Tente FS menor, outro critério ou menos contrapeso.`);
+        status(`${screened} combinações na triagem, ${combos.length} otimizadas (${evals} simulações): ${ok.length} aguentam com FS ≥ ${st.fsMin} (${crit}). As melhores:`);
+        const cols = vars.flatMap((v): (keyof OptParams)[] => (v === 'armSplit' ? ['longArm', 'shortArm'] : [v]));
+        $('opt-result').innerHTML = `<table>
+          <tr><th>Material</th><th>Bitola</th><th>Massa do braço (kg)</th>${cols.map((k) => `<th>${label(k)}</th>`).join('')}<th>${OBJECTIVE_NAMES[obj]}</th><th>FS</th><th></th></tr>
+          ${ok.slice(0, 12).map((x, i) => `<tr><td>${BAR_MATS[x.c.mat].label}${BAR_MATS[x.c.mat].note ? ` <span class="muted" title="Valores estimados: ${BAR_MATS[x.c.mat].note}">(est.)</span>` : ''}</td><td>${x.c.size}</td><td>${x.params.armMass.toFixed(1)}</td>
+            ${cols.map((k) => `<td>${+(x.params[k] ?? 0).toPrecision(4)}</td>`).join('')}
+            <td><b>${fmt(x.value)}</b></td><td>${x.fs.toFixed(2)}</td><td><button type="button" class="ghost" data-mat="${i}">Aplicar</button></td></tr>`).join('')}
+        </table>`;
+        $('opt-result').querySelectorAll<HTMLButtonElement>('[data-mat]').forEach((b) =>
+          b.addEventListener('click', () => {
+            const x = ok[Number(b.dataset.mat)];
+            const { pinOffset, aimDeg, ...rest } = Object.fromEntries([...cols, 'armMass', 'legMass'].map((k) => [k, +(x.params[k as keyof OptParams] ?? 0).toPrecision(5)])) as Partial<OptParams>;
+            o.apply3d({ pinOffset, aimDeg });
+            o.applyArm(x.c.arm, st.mode);
+            o.apply(rest);
+          }),
+        );
+      },
+    });
+  }
+
+  function showOptima(optVars: OptVar[], all: ReturnType<typeof distinctOptima<{ u: number[]; value: number; params: OptParams; fs?: number }>>, current: number, evals: number, base: OptParams, armTotal?: number, st?: Struct) {
     const vars = optVars.flatMap((v): (keyof OptParams)[] => (v === 'armSplit' ? ['longArm', 'shortArm'] : [v])); // table columns
     const name = OBJECTIVE_NAMES[objective()];
     const sum = +(o.params.longArm + o.params.shortArm).toFixed(3);
@@ -144,17 +221,20 @@ export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p:
       ? `${STARTS} partidas, ${evals} simulações: todas as que deram certo chegaram ao mesmo ótimo, provavelmente o global nessa faixa.`
       : `${STARTS} partidas, ${evals} simulações: ${optima.length} ótimos locais distintos. Compare as soluções.`) + stuckNote);
     $('opt-result').innerHTML = `<table>
-      <tr><th></th>${vars.map((k) => `<th>${label(k)}</th>`).join('')}<th>${name}</th><th>achado</th><th></th></tr>
-      <tr><td>atual</td>${vars.map((k) => `<td>${+(base[k] ?? 0).toPrecision(4)}</td>`).join('')}<td>${fmt(current)}</td><td></td><td></td></tr>
+      <tr><th></th>${vars.map((k) => `<th>${label(k)}</th>`).join('')}<th>${name}</th>${st ? '<th>FS</th>' : ''}<th>achado</th><th></th></tr>
+      <tr><td>atual</td>${vars.map((k) => `<td>${+(base[k] ?? 0).toPrecision(4)}</td>`).join('')}<td>${fmt(current)}</td>${st ? '<td></td>' : ''}<td></td><td></td></tr>
       ${optima.map((op, i) => `<tr><td>${i === 0 ? '<b>melhor</b>' : `#${i + 1}`}</td>
         ${vars.map((k) => `<td>${+(op.params[k] ?? 0).toPrecision(4)}</td>`).join('')}
-        <td><b>${fmt(op.value)}</b>${gain(op.value)}</td><td>${op.count}×</td>
+        <td><b>${fmt(op.value)}</b>${gain(op.value)}</td>${st ? `<td${(op.fs ?? 0) < st.fsMin * 0.97 ? ' class="fail"' : ''}>${(op.fs ?? 0).toFixed(2)}</td>` : ''}<td>${op.count}×</td>
         <td><button type="button" class="ghost" data-opt="${i}">Aplicar</button></td></tr>`).join('')}
     </table>`;
     $('opt-result').querySelectorAll<HTMLButtonElement>('[data-opt]').forEach((b) =>
       b.addEventListener('click', () => {
-        const { pinOffset, aimDeg, ...rest } = Object.fromEntries(vars.map((k) => [k, +(optima[Number(b.dataset.opt)].params[k] ?? 0).toPrecision(4)])) as Partial<OptParams>;
+        const op = optima[Number(b.dataset.opt)];
+        const keys: (keyof OptParams)[] = st ? [...vars, 'armMass', 'legMass'] : vars; // a section's mass follows the found lengths
+        const { pinOffset, aimDeg, ...rest } = Object.fromEntries(keys.map((k) => [k, +(op.params[k] ?? 0).toPrecision(st && (k === 'armMass' || k === 'legMass') ? 5 : 4)])) as Partial<OptParams>;
         o.apply3d({ pinOffset, aimDeg }); // before apply(): it re-runs the shot with the fields' values
+        if (st) o.applyArm(undefined, st.mode);
         o.apply(rest);
       }),
     );

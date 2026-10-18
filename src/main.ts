@@ -43,6 +43,12 @@ const optimizer = mountOptimizer({
   params,
   apply: (p) => (Object.assign(params, p), syncForm(), run()), // run() re-simulates at full accuracy
   env3: () => (is3d() ? env3() : undefined),
+  spec: () => spec,
+  // a result found with "parts can't break": show the shot under the same criterion (and the swept arm section)
+  applyArm: (arm, mode) => {
+    if (arm) spec.arm = arm;
+    $<HTMLSelectElement>('break').value = mode;
+  },
   apply3d: (v) => {
     if (v.pinOffset !== undefined) $<HTMLInputElement>('pin').value = String(Math.round(v.pinOffset * 100));
     if (v.aimDeg !== undefined) $<HTMLInputElement>('aim').value = String(+v.aimDeg.toFixed(2));
