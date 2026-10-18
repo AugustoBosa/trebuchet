@@ -25,3 +25,22 @@ describe('flexão no braço', () => {
     expect(r.peakBending!.fromAxle).toBeCloseTo(2 / 3, 1);
   });
 });
+
+describe('esforços N, V, M ao longo da barra', () => {
+  it('barra articulada solta da horizontal: V no pino = m·g/4, N = 0', () => {
+    const r = simulate(rod('pin'), { tMax: 0.0015, frameEvery: 1, loadEvery: 1 });
+    const L0 = r.loads![0].rods[0]!;
+    expect(Math.abs(L0.V[0])).toBeCloseTo((10 * G) / 4, 1); // pin end: x = −1
+    expect(Math.max(...L0.N.map(Math.abs))).toBeLessThan(1e-6);
+    expect(Math.hypot(...r.loads![0].F[0])).toBeCloseTo((10 * G) / 4, 1); // reaction on the rod
+  });
+
+  it('barra pendurada parada: tração N = μ·g·(trecho abaixo do corte)', () => {
+    const m = rod('pin');
+    m.bodies[0].angle = -Math.PI / 2;
+    m.bodies[0].pos = [0, 4];
+    const L0 = simulate(m, { tMax: 0.0015, frameEvery: 1, loadEvery: 1 }).loads![0].rods[0]!;
+    L0.x.forEach((x, k) => expect(L0.N[k]).toBeCloseTo(5 * G * (1 - x), 6)); // μ = 5 kg/m, far side from x to +1
+    expect(Math.max(...L0.V.map(Math.abs), ...L0.M.map(Math.abs))).toBeLessThan(1e-6);
+  });
+});

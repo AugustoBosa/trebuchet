@@ -1,6 +1,6 @@
 import { jointRows, point, type Row, type State } from './constraints';
 import { fly } from './ballistics';
-import { anchor, bendingPeak } from './bending';
+import { anchor, bendingPeak, rodLoads } from './bending';
 import { G, type Mechanism, type Vec } from './model';
 
 const GROUND_TOL = 0.02; // m of penetration tolerated before a part counts as hitting the ground
@@ -356,12 +356,22 @@ export interface Result {
   peakForce: number[]; // per joint, N (until release)
   peakBending?: { moment: number; fromAxle: number; long: boolean; t: number }; // the arm's worst section until release: N·m, m from the axle, on the long (sling) side?
   dissipated: number; // J lost to friction + air + impacts until release
+  loads?: LoadSample[]; // internal forces until release, every loadEvery steps (structure.ts checks them)
   error?: string;
+}
+
+// One instant of the internal forces: positions, each joint's reaction on its body a (world, 0 when open) and,
+// for every rod, N / V / M along it (bending.ts rodLoads).
+export interface LoadSample {
+  t: number;
+  q: Float64Array;
+  F: Vec[];
+  rods: (ReturnType<typeof rodLoads> | undefined)[];
 }
 
 export function simulate(
   m: Mechanism,
-  opts: { dt?: number; tMax?: number; frameEvery?: number; afterRelease?: number; v0?: Float64Array } = {}, // v0: initial velocities, for tests
+  opts: { dt?: number; tMax?: number; frameEvery?: number; afterRelease?: number; v0?: Float64Array; loadEvery?: number } = {}, // v0: initial velocities, for tests
 ): Result {
   // dt 0.5 ms: ≤0.001% range error vs 0.1 ms now that release is interpolated; frames stay 1 ms apart
   const { dt = 5e-4, tMax = 8, frameEvery = 2, afterRelease = 1 } = opts;
@@ -409,7 +419,16 @@ export function simulate(
     // Friction uses this step's normal forces from the next step on; the first stage keeps the previous
     // magnitudes (one more evaluation of lag, still within the existing lagged-friction approximation).
     prev = lambda;
-    if (liftOff) a1 = accelerations(m, s, active, prev).a; // the active set changed: first stage must see it
+    let lamNow = lambda;
+    if (liftOff) ({ a: a1, lambda: lamNow } = accelerations(m, s, active, prev)); // the active set changed: first stage must see it
+    if (opts.loadEvery && !res.release && step % opts.loadEvery === 0) {
+      const F = m.joints.map((j, ji): Vec => {
+        const f: Vec = [0, 0];
+        if (active[ji]) jointRows(s, j, m.bodies.length).forEach((r, k) => ((f[0] += r.J[3 * j.a] * (lamNow[ji][k] ?? 0)), (f[1] += r.J[3 * j.a + 1] * (lamNow[ji][k] ?? 0))));
+        return f;
+      });
+      (res.loads ??= []).push({ t, q: s.q.slice(), F, rods: m.bodies.map((_, b) => rodLoads(m, s, active, a1, lamNow, b)) });
+    }
     const before = s;
     s = rk4(m, s, active, prev, dt, a1);
     // re-contact: an open contact closing with approaching velocity becomes active with an inelastic impact
