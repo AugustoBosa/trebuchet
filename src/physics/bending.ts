@@ -80,7 +80,7 @@ export function rodLoads(m: Mechanism, s: State, active: boolean[], a: Float64Ar
       if (ld.x > xs + 1e-9) (Nk += ld.F[0] * e[0] + ld.F[1] * e[1]), (Vk += ld.F[0] * n[0] + ld.F[1] * n[1]), (Mk += (ld.p[0] - ps[0]) * ld.F[1] - (ld.p[1] - ps[1]) * ld.F[0] + ld.C);
     (x[k] = xs), (N[k] = Nk), (V[k] = Vk), (M[k] = Mk);
   }
-  return { x, N, V, M };
+  return { x, N, V, M } as { x: Float64Array; N: Float64Array; V: Float64Array; M: Float64Array; Vl?: Float64Array; Ml?: Float64Array }; // Vl / Ml: sideways parts, from the 3D solver
 }
 
 export function bendingPeak(m: Mechanism, s: State, active: boolean[], a: Float64Array, lambda: number[][], b: number) {

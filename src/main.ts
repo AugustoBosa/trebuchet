@@ -195,7 +195,7 @@ const still3 = (m3: Mechanism3): Result3 => ({
   frames: [{ t: 0, ...initialState3(m3), ke: 0, pe: 0, kes: [], forces: [], speed: 0 }],
   flight: [], range: 0, lateral: 0, efficiency: 0, inputEnergy: 0, peakForce: [], dissipated: 0,
 });
-const planar = (r: Result3): Result => ({
+const planar = ({ loads: _, ...r }: Result3): Result => ({
   ...r,
   release: r.release && { ...r.release, p: [r.release.p[0], r.release.p[1]], v: [r.release.v[0], r.release.v[1]] },
   flight: r.flight.map((p) => [p[0], p[1]]),
@@ -572,8 +572,8 @@ function run() {
   saveCurrent(design());
   const id = ++runId;
   if (!is3d()) return show(m, simulate(m, { afterRelease: 1.5, loadEvery: 2 }));
-  // the 3D view checks the structure with the planar shot's internal forces (same machine; the 3D solver matches it in
-  // the plane). ponytail: out-of-plane bending (pin offset, crosswind) left out
+  // the 3D view checks the structure with the planar shot's joint forces and the 3D solver's rod loads (they match in the
+  // plane; the 3D ones add the sideways bending from a pin offset or crosswind). Sample k of both runs is the same step.
   const loads = isFree() ? undefined : simulate(m, { afterRelease: 0, frameEvery: 1e9, loadEvery: 2 }).loads;
   let m3: Mechanism3;
   try {
@@ -585,7 +585,7 @@ function run() {
   sim3(m3).then((r3) => {
     if (id !== runId) return; // a newer shot was asked for meanwhile
     $('node3d').textContent = '';
-    show(m, { ...planar(r3), loads }, m3, r3);
+    show(m, { ...planar(r3), loads: loads?.map((S, k) => (r3.loads?.[k] ? { ...S, rods: r3.loads[k].rods } : S)) }, m3, r3);
   });
 }
 
@@ -600,7 +600,7 @@ function sim3(m3: Mechanism3): Promise<Result3> {
   return new Promise((resolve) => {
     w.onmessage = (e: MessageEvent<Result3>) => ((simBusy = false), resolve(e.data));
     w.onerror = (e) => ((simBusy = false), ($('err').textContent = `Erro no solver 3D: ${e.message}`));
-    w.postMessage({ m3, opts: { afterRelease: 1.5 } });
+    w.postMessage({ m3, opts: { afterRelease: 1.5, loadEvery: 2 } });
   });
 }
 

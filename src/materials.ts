@@ -84,6 +84,7 @@ export interface Section {
   A: number; // area, m²
   I: number; // second moment in the plane of the throw (bending of the arm), m⁴
   W: number; // section modulus I / (h/2), m³
+  Wl: number; // sideways section modulus (bending out of the plane of the throw), m³
   Imin: number; // weakest axis (buckling of a strut), m⁴
   k: number; // τ_max = k·V/A
   bearing: number; // what a pin pushes on: solid width, or the two walls of a tube, m
@@ -94,19 +95,19 @@ export function section(s: PartSpec): Section {
   switch (s.shape ?? 'rect') {
     case 'round': {
       const I = (Math.PI * d ** 4) / 64;
-      return { A: (Math.PI * d * d) / 4, I, W: (2 * I) / d, Imin: I, k: 4 / 3, bearing: d, depth: d };
+      return { A: (Math.PI * d * d) / 4, I, W: (2 * I) / d, Wl: (2 * I) / d, Imin: I, k: 4 / 3, bearing: d, depth: d };
     }
     case 'ctube': {
       const di = d - 2 * t, I = (Math.PI * (d ** 4 - di ** 4)) / 64;
-      return { A: (Math.PI * (d * d - di * di)) / 4, I, W: (2 * I) / d, Imin: I, k: 2, bearing: 2 * t, depth: d };
+      return { A: (Math.PI * (d * d - di * di)) / 4, I, W: (2 * I) / d, Wl: (2 * I) / d, Imin: I, k: 2, bearing: 2 * t, depth: d };
     }
     case 'rtube': {
       const bi = b - 2 * t, hi = h - 2 * t, A = b * h - bi * hi;
       const I = (b * h ** 3 - bi * hi ** 3) / 12, Iw = (h * b ** 3 - hi * bi ** 3) / 12;
-      return { A, I, W: (2 * I) / h, Imin: Math.min(I, Iw), k: A / (2 * t * hi), bearing: 2 * t, depth: h }; // the two webs carry the shear
+      return { A, I, W: (2 * I) / h, Wl: (2 * Iw) / b, Imin: Math.min(I, Iw), k: A / (2 * t * hi), bearing: 2 * t, depth: h }; // the two webs carry the shear
     }
     default:
-      return { A: b * h, I: (b * h ** 3) / 12, W: (b * h * h) / 6, Imin: (Math.min(b, h) ** 3 * Math.max(b, h)) / 12, k: 1.5, bearing: b, depth: h };
+      return { A: b * h, I: (b * h ** 3) / 12, W: (b * h * h) / 6, Wl: (h * b * b) / 6, Imin: (Math.min(b, h) ** 3 * Math.max(b, h)) / 12, k: 1.5, bearing: b, depth: h };
   }
 }
 export const hasSection = (s: PartSpec | undefined) => !!s && ((s.shape ?? 'rect') === 'rect' || s.shape === 'rtube' ? !!(s.b && s.h) : !!s.d);

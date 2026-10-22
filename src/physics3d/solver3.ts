@@ -1,7 +1,7 @@
 import { G } from '../physics/model';
 import { bounceRow, reboundOpen, solve } from '../physics/solver';
 import { fly3 } from './ballistics3';
-import { anchor3, bendingPeak3 } from './bending3';
+import { anchor3, bendingPeak3, rodLoads3 } from './bending3';
 import { jointRows3, omega, point3, worldAxis, type Row3, type State3 } from './constraints3';
 import { cross, dot, rotate, rotateInv, sub, type Joint3, type Mechanism3, type V3 } from './model3';
 
@@ -278,11 +278,12 @@ export interface Result3 {
   peakForce: number[];
   peakBending?: { moment: number; fromAxle: number; long: boolean; t: number }; // see Result in physics/solver.ts
   dissipated: number;
+  loads?: { t: number; rods: (ReturnType<typeof rodLoads3> | undefined)[] }[]; // per rod N / V / M (+ sideways Vl / Ml) until release, every loadEvery steps
   error?: string;
 }
 
 // v0: initial velocities (6 per body), for tests that start in motion
-export function simulate3(m: Mechanism3, opts: { dt?: number; tMax?: number; frameEvery?: number; afterRelease?: number; v0?: Float64Array } = {}): Result3 {
+export function simulate3(m: Mechanism3, opts: { dt?: number; tMax?: number; frameEvery?: number; afterRelease?: number; v0?: Float64Array; loadEvery?: number } = {}): Result3 {
   const { dt = 5e-4, tMax = 8, frameEvery = 2, afterRelease = 1 } = opts;
   const nb = m.bodies.length;
   const peakForce = m.joints.map(() => 0);
@@ -321,7 +322,9 @@ export function simulate3(m: Mechanism3, opts: { dt?: number; tMax?: number; fra
       else if (!res.release) peakForce[ji] = Math.max(peakForce[ji], load(j, lambda[ji]));
     });
     prev = lambda;
-    if (liftOff) a1 = accelerations3(m, s, active, prev).a;
+    let lamNow = lambda;
+    if (liftOff) ({ a: a1, lambda: lamNow } = accelerations3(m, s, active, prev));
+    if (opts.loadEvery && !res.release && step % opts.loadEvery === 0) (res.loads ??= []).push({ t, rods: m.bodies.map((_, b) => rodLoads3(m, s, active, a1, lamNow, b)) });
     const before = s;
     s = rk4(m, s, active, prev, dt, a1);
     m.joints.forEach((j, ji) => {

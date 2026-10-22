@@ -85,7 +85,7 @@ export function assess(m: Mechanism, r: Result, spec: Record<string, PartSpec>, 
       const [mat, ss] = rodSpec(id, b), sec = section(ss), fb = strength(mat, 'bend', mode), fv = strength(mat, 'shear', mode);
       let kb = 0, kv = 0, ub = -1, uv = -1;
       for (let k = 0; k < L.x.length; k++) {
-        const u1 = (g * (Math.abs(L.N[k]) / sec.A + Math.abs(L.M[k]) / sec.W)) / fb, u2 = (g * sec.k * Math.abs(L.V[k])) / sec.A / fv;
+        const u1 = (g * (Math.abs(L.N[k]) / sec.A + Math.abs(L.M[k]) / sec.W + (L.Ml ? L.Ml[k] / sec.Wl : 0))) / fb, u2 = (g * sec.k * Math.hypot(L.V[k], L.Vl?.[k] ?? 0)) / sec.A / fv;
         if (u1 > ub) (ub = u1), (kb = k);
         if (u2 > uv) (uv = u2), (kv = k);
       }
