@@ -73,3 +73,19 @@ describe('pórtico', () => {
     expect(buck.u).toBeCloseTo(N / ((Math.PI ** 2 * mat.E * sec.Imin) / (3 * Math.sqrt(1.25)) ** 2), 6);
   });
 });
+
+describe('torre da polia do MURLIN', () => {
+  const m = build('murlin', defaultsFor('murlin'));
+  const r = simulate(m, { loadEvery: 2 });
+  const tower = (b: number) => assess(m, r, { tower: { mat: 'aco-a36', shape: 'rect', b, h: b } }, 'rupture').checks.filter((c) => c.id === 'tower');
+
+  it('aparece com as duas verificações e a torre fina é pior que a grossa', () => {
+    const fino = tower(0.03), grosso = tower(0.15);
+    expect(fino.map((c) => c.label)).toEqual(['Torre da polia: flexão + normal', 'Torre da polia: flambagem (engastada)']);
+    fino.forEach((c, k) => expect(c.u).toBeGreaterThan(grosso[k].u));
+  });
+
+  it('sem seção informada não verifica (como o pórtico)', () => {
+    expect(assess(m, r, {}, 'rupture').checks.some((c) => c.id === 'tower')).toBe(false);
+  });
+});

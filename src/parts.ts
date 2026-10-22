@@ -299,7 +299,8 @@ export function presetParts(c: PresetCtx): Part[] {
   const strI = m.joints.findIndex((_, i) => own.get(`j:${i}`) === 'string');
   add('string', kind === 'walking' ? 'Corda de ajuste da perna' : 'Corda', [...(kind === 'walking' ? param('cockDeg') : []), ...ropeRows(...specOf('string'), peak(r, strI), checkRows(a, 'string'))]);
   const camI = m.joints.findIndex((j) => j.kind === 'cam');
-  add('cam', 'Tambor e corda do contrapeso', [...param('camStart'), ...param('camEnd'), ...param('pulleyHeight'), ...ropeRows(...specOf('cam'), peak(r, camI), checkRows(a, 'cam'))]);
+  add('cam', 'Tambor e corda do contrapeso', [...param('camStart'), ...param('camEnd'), ...param('pulleyHeight'), ...ropeRows(...specOf('cam'), peak(r, camI), checkRows(a, 'cam')),
+    ...(m.joints[camI] && (m.joints[camI] as { over?: Vec }).over ? [...sectionRows(...specOf('tower'), { def: DEF_BAR, est: { shape: 'rect', b: 0.15, h: 0.15 } }), ...checkRows(a, 'tower')] : [])]);
   const rolI = m.joints.findIndex((j) => j.kind === 'roller');
   add('roller', 'Rolete', [...param('rollerOffset'), ...param('rollCrr'), ...forceRow(peak(r, rolI))]);
   const guI = m.joints.findIndex((_, i) => own.get(`j:${i}`) === 'guide');

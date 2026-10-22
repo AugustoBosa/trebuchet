@@ -5,7 +5,7 @@
 //     f_k = 0.7·f_m, γ_w = 1.4; shear f_vk = 0.54·f_vm, γ_v = 1.8; bending held to the compressed fiber's f_c0,d;
 //     tension f_t0 = f_c0/0.77), steel per NBR 8800 (γ_a1 = 1.10), ropes at a fifth of the breaking load.
 import { point } from './physics/constraints';
-import type { Mechanism, Vec } from './physics/model';
+import type { Cam, Mechanism, Vec } from './physics/model';
 import type { Result } from './physics/solver';
 import { barMat, hasSection, ROPE_MATS, section, type BarMat, type PartSpec } from './materials';
 
@@ -143,6 +143,19 @@ export function assess(m: Mechanism, r: Result, spec: Record<string, PartSpec>, 
         note('hanger', `j:${hangI}`, 'Haste: compressão', -n / sec.A / strength(mat, 'comp', mode), S.t, () => `${kN(-n)} → σ = ${MPa(-n / sec.A)} contra ${MPa(strength(mat, 'comp', mode))}`);
         note('hanger', `j:${hangI}`, 'Haste: flambagem', -n / euler(mat, sec.Imin, Lh, mode), S.t, () => `${kN(-n)} contra a carga de Euler ${kN(euler(mat, sec.Imin, Lh, mode))}`);
       }
+    }
+
+    // pulley tower (a cantilever column from the ground): the rope folds over the pulley, one leg down to the counterweight,
+    // the other toward the drum, so the top takes T·(down + unit to the drum): axial from the vertical part, bending from the rest
+    const camI = m.joints.findIndex((j) => j.kind === 'cam'), cam = m.joints[camI] as Cam | undefined;
+    if (cam?.over && spec.tower && hasSection(spec.tower)) {
+      const T = Math.hypot(...S.F[camI]), hub = point({ q: S.q, v: S.q }, cam.b, cam.hub).p, H = cam.over[1];
+      const d: Vec = [hub[0] - cam.over[0], hub[1] - cam.over[1]], dl = Math.hypot(...d) || 1;
+      const P = g * T * (1 - d[1] / dl), Fh = g * T * Math.abs(d[0] / dl); // P: down (+ compresses)
+      const mat = barMat(spec.tower.mat), sec = section(spec.tower), Pcr = euler(mat, sec.Imin, 2 * H, mode);
+      const u1 = (Math.max(P, 0) / sec.A + (Fh * H) / Math.min(sec.W, sec.Wl)) / strength(mat, 'bend', mode);
+      note('tower', `j:${camI}`, 'Torre da polia: flexão + normal', u1, S.t, () => `σ = ${MPa(u1 * strength(mat, 'bend', mode))} contra ${MPa(strength(mat, 'bend', mode))} (topo a ${H.toFixed(2).replace('.', ',')} m)`);
+      note('tower', `j:${camI}`, 'Torre da polia: flambagem (engastada)', P / Pcr, S.t, () => `${kN(P)} contra a carga de Euler ${kN(Pcr)}`);
     }
 
     // ropes: tension vs breaking load (design: a fifth of it)
