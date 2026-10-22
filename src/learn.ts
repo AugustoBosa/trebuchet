@@ -149,6 +149,8 @@ const NOTES: Record<Kind, { era: string; pro: string[]; con: string[]; knobs: (k
     pro: ['Queda do King Arthur com a eficiência do eixo flutuante'], con: ['Nada absorve a energia que sobra: pode descarrilar se o ajuste errar'] },
   spring: { era: 'Experimental', knobs: ['springK', 'springRest', 'slingLength', 'releaseDeg'],
     pro: ['Leve e rápida: não acelera um contrapeso pesado'], con: ['Molas reais têm massa, cansam e quebram'] },
+  fiffer: { era: '2010 (Punkin Chunkin)', knobs: ['cwMass', 'slingLength', 'releaseDeg', 'projMass'],
+    pro: ['Transmissão sempre aberta: sem ponto morto no curso', 'Contrapeso gigante cai só 5 pés e ainda lança ~600 m'], con: ['Geometria fixa e precisa: pino e elos têm de bater na tesoura', 'Pesado e difícil de transportar (contrapeso de 2 t)'] },
 };
 $('models').innerHTML = KIND_IDS.map((k) => {
   const n = NOTES[k];

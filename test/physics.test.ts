@@ -74,7 +74,8 @@ describe('motor', () => {
     expect(loss).toBeGreaterThan(-5e-3);
     expect(loss).toBeLessThan(kind === 'whipper' || kind === 'f2k' ? 0.3 : 5e-3);
     expect(r.efficiency).toBeGreaterThan(0);
-    expect(r.efficiency).toBeLessThan(1);
+    // η counts only the counterweight's drop as input; the Fiffer's links and connector also fall (~8 % of it), so it may read above 1
+    expect(r.efficiency).toBeLessThan(kind === 'fiffer' ? 1.1 : 1);
     expect(r.range).toBeGreaterThan(10);
   });
 

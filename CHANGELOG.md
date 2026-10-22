@@ -13,17 +13,21 @@ Simulador de trebuchets (Vite + TypeScript). Rodar: `npm run dev` · testes: `np
 
 ## Em aberto
 
-Só restam itens que dependem de dados que não existem em fonte pública (e o trilho dos floating arms, sem comprimento/seção no modelo). Retomar se aparecerem medidas.
+Nada. Os itens que sobravam foram investigados a fundo em 2026-10-22 (texto, código-fonte dos inventores e vídeos) e estão fechados abaixo.
 
-1. **Walking arm: 69 m contra 81 m do recorde (Stapleton, 2018).** A bola ainda parte do chão.
-   - Segunda tentativa com a geometria do próprio autor (Instructables, passos 5 e 9): palitos num parafuso a 4″ do eixo, do lado do dedo, e a bola no canto entre eles e a borda do braço. Está guardada no branch `exp/walking-perch`.
-   - Com funda inextensível e palitos rígidos, a bola fica travada no ninho. Com palitos que cedem (porca borboleta), o melhor ponto de uma varredura dá ~30 m.
-   - O resultado depende do atrito do saquinho, da elasticidade das cordas e do instante em que o laço sai do dedo. Nada disso foi medido.
-2. **Tipos não feitos:**
-   - **VLR:** só há a definição do princípio, sem nenhuma medida.
-   - **Merlin:** braço que corre num trilho em J, montado com hidráulica; nenhuma dimensão publicada.
-   - **BAKA:** a sigla não é definida em nenhuma fonte.
-   - **Fiffer:** a topologia está descrita pelo construtor de um protótipo (vídeo "Fiffer explanation", beardedone85, 2011): viga do contrapeso articulada atrás, duas barras em tesoura empurrando um pino para baixo e para a frente, e uma correia que puxa a ponta curta do braço por um came. Uma reconstrução com proporções estimadas puxava a correia só ~8 cm e travava num ponto morto aos ~41° de queda da viga; um resultado aparentemente bom (~102 m) vinha de energia criada nesse travamento. Falta o arranjo real da tesoura e o raio do came.
+## 2026-10-22: Fiffer feito; walking arm, VLR, Merlin e BAKA investigados e fechados
+
+- **Fiffer (feito, `src/fiffer.ts`).** A fonte era o simulador publicado pelo próprio time First in Fright (github.com/treygreer/treb, `first_in_fright_2012/2013.py`), com toda a geometria (elos de 2,61 e 2,98 pés resolvidos pelo ângulo de 10°, biela de 10,45 pés, braço de 9 pés dobrado, rampa de 11 pés, queda de 5 pés) e as massas de cada peça. O "ponto morto" da reconstrução anterior era artefato de proporções estimadas: o ângulo de transmissão da biela vai de 26° a 180° sem travar.
+  - **Validação** (`test/fiffer.test.ts`), rodando o simulador original (com PyQt stubado) na configuração 2026 (8 lb, funda 9,54 ft, 30°): com o pé do pórtico rígido, o original solta em 0,6783 s a 119,3 m/s; o nosso, em 0,6780 s a 118,7 m/s. Massa e inércia do braço batem exatamente (90,58 kg, 76,32 kg·m²). A energia total se conserva (0,5% dissipado).
+  - O README deles dá 2.177 ft / 0,683 s / 116 m/s: o pé dianteiro do pórtico deles está numa mola amortecida que dissipa ~8% da energia. O nosso chão é rígido.
+  - O alcance do preset (funda 8,55 ft, 10 lb, 35°) é ~2.300 ft. Contra os medidos no Punkin Chunkin 2010 (1.815 → 1.920 ft), o modelo é otimista, como se espera de uma máquina sem folgas e sem efeitos de abóbora real.
+  - Diferenças assumidas: rampa de 5 kg (no original é sem massa); estabilizador da biela sobre o eixo (3" fora no original); barras desenhadas com comprimento cobrindo todos os pinos. A conversão para o editor livre muda o alcance em ~3% (inércias compostas viram barra uniforme).
+  - A eficiência pode passar de 100%: o insumo do solver é só a queda do contrapeso, e os elos e a biela também descem.
+  - Variante com correia e came do protótipo do beardedone85: sem medidas (raio do came, comprimento da correia). Não feita.
+- **Walking arm: fechado, calibração só.** Fonte primária completa lida (Instructables, passos e 77 comentários). O recorde de 81 m (2018) é do filho de 8 anos do autor, com uma máquina de 20 lb, bola de 3 oz e plataforma com gatilho. Geometria do ninho conhecida (palitos a 4″ do eixo, funda de ~30″), mas atrito do saquinho, instante da soltura (dedo entortado à mão) e folga do eixo não existem em nenhuma fonte; a única meta observável é um ângulo de soltura de ~45° estimado por um comentarista. Qualquer valor ajustado para dar 81 m seria calibração, não validação. Fica em ~69 m.
+- **BAKA: fechado.** Significa "Bent Arm King Arthur" (braço longo dobrado 90° para frente, razões ~3:1:1 da altura do eixo, cabos-guia da ponta do braço longo à do curto). Só há razões, sem medidas, massas ou alcance, e o arranjo dos cabos-guia não é descrito. Um preset seria invenção sem validação.
+- **VLR: fechado.** "Variable Leverage Remote Drop": uma frase de princípio (corda puxada de um ponto remoto, contrapeso puxa o meio de um vão). Nenhuma medida.
+- **Merlin: fechado.** Chris Gerow (Super Trebuchets), 15 m de altura, 229 m em 2007 e 322 m em 2008 (Punkin Chunkin). Base de projeto: contrapeso de 272 kg, braço de 3,66 m, trilho a 40°. A curva do trilho em J, as massas reais e a posição do pivô flutuante nunca foram publicadas; as páginas de histórico do projeto que as teriam estão fora do ar.
 
 ## 2026-10-18: materiais brasileiros, quebra estrutural e otimização com uma peça disponível
 

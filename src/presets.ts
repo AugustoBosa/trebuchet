@@ -1,5 +1,6 @@
 import { point } from './physics/constraints';
 import type { Body, Joint, Mechanism, Vec } from './physics/model';
+import { buildFiffer } from './fiffer';
 import { initialState } from './physics/solver';
 
 // Parameters a user edits; each preset turns them into a Mechanism.
@@ -36,7 +37,7 @@ export const defaults = {
   springRest: 1.5, // ... and their unstretched length (m), anchored on the ground under the short arm
 };
 export type Params = typeof defaults;
-export type Kind = 'fixed' | 'hinged' | 'floating' | 'traction' | 'whipper' | 'walking' | 'murlin' | 'wheel' | 'f2k' | 'fet' | 'ka' | 'faka' | 'spring';
+export type Kind = 'fixed' | 'hinged' | 'floating' | 'traction' | 'whipper' | 'walking' | 'murlin' | 'wheel' | 'f2k' | 'fet' | 'ka' | 'faka' | 'spring' | 'fiffer';
 
 const BASE: (keyof Params)[] = ['pivotHeight', 'longArm', 'shortArm', 'armMass'];
 const SHOT: (keyof Params)[] = ['projMass', 'projRadius', 'slingLength', 'releaseDeg', 'airDensity', 'dragCd', 'axleMu', 'axleRadius', 'troughMu'];
@@ -125,6 +126,13 @@ export const KINDS: Record<Kind, { label: string; info: string; fields: (keyof P
     // King Arthur's frame; sling/release/arm angle re-optimized (≈499 m, η ≈ 85 %; the axle rolls ~1.3 m)
     preset: { pivotHeight: 5.3, cockDeg: 37, slingLength: 6.2, releaseDeg: 39, hingeLength: defaults.hingeLength, shortArm: defaults.shortArm, longArm: defaults.longArm },
   },
+  fiffer: {
+    label: 'Fiffer (First in Fright)',
+    info: 'Rampa do contrapeso articulada atrás do eixo, tesoura de dois elos entre a ponta da rampa e um pino fixo, e uma biela rígida do joelho da tesoura até a ponta curta do braço. Ao cair, a rampa estica a tesoura, que empurra a biela para baixo e para a frente e gira o braço por ~136°, com ângulo de transmissão sempre aberto (sem ponto morto). Geometria do simulador publicado pelos inventores (First in Fright, Punkin Chunkin; github.com/treygreer/treb): rampa de 11 pés, queda de 5 pés, braço longo de 9 pés, contrapeso de 4581 lb, abóbora de 10 lb. A geometria é fixa; mude contrapeso, funda, projétil e disparo. A abóbora parte da plataforma na altura da ponta do braço. A eficiência mostrada conta só a queda do contrapeso como insumo, e aqui os elos e a biela também descem (~8% a mais de energia), então pode passar de 100%; a energia total fecha.',
+    fields: ['cwMass', 'slingLength', 'projMass', 'projRadius', 'releaseDeg', 'airDensity', 'dragCd', 'axleMu', 'axleRadius', 'troughMu'],
+    // the 2012 machine: 4581 lb, 10 lb pumpkin of 8 in, sling 8.54665 ft, Cd 0.2 as in the inventors' flight model, frictionless pins
+    preset: { cwMass: 4581 * 0.45359, projMass: 10 * 0.45359, projRadius: 4 * 0.0254, slingLength: 8.54665 * 0.3048, releaseDeg: 35, dragCd: 0.2, axleMu: 0, troughMu: 0 },
+  },
   spring: {
     label: 'Mola',
     info: 'Molas presas na ponta do braço curto e ancoradas no chão puxam o braço para baixo, no lugar do contrapeso. A energia elástica é ½k·x², e sem um contrapeso pesado para acelerar junto, a máquina fica leve e rápida. Molas sem massa no modelo (no real, parte da energia vai para acelerar a própria mola, e elas cansam e quebram).',
@@ -153,6 +161,7 @@ export function geometry(p: Params, kind: Kind = 'fixed') {
 }
 
 export function build(kind: Kind, p: Params): Mechanism {
+  if (kind === 'fiffer') return buildFiffer(p);
   const { longArm: L1, shortArm: L2 } = p;
   const { th, u, pivot, tip, shortTip } = geometry(p, kind);
   const d = (L1 - L2) / 2; // arm COM offset from pivot, along the long arm
