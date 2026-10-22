@@ -16,7 +16,8 @@ const KMOD = 0.88;
 type Kind = 'bend' | 'comp' | 'tens' | 'shear' | 'bearing0' | 'bearing90';
 export function strength(mat: BarMat, k: Kind, mode: Mode): number {
   if (mat.metal) {
-    const f = k === 'shear' ? mat.fv : k.startsWith('bearing') ? 1.5 * mat.fm : mat.fm; // ponytail: bearing ≈ 1.5·f_y, not NBR 8800's 2.4·f_u/γ
+    if (k.startsWith('bearing')) return (2.4 * (mat.fu ?? 1.4 * mat.fm)) / (mode === 'design' ? 1.35 : 1); // hole bearing: NBR 8800 2.4·f_u (γ_a2 = 1.35 in design)
+    const f = k === 'shear' ? mat.fv : mat.fm;
     return mode === 'design' ? f / 1.1 : f;
   }
   const ft = mat.fc0 / 0.77;

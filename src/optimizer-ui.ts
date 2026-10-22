@@ -142,8 +142,8 @@ export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p:
   });
 
   // Material × commercial size of the arm, ranked by what holds. A quick shot of every pair at the current design
-  // first; then one optimization each for, per material, the lightest size that holds there and the next lighter one
-  // (the found geometry may let it hold). ponytail: two sizes per material, not all of them; widen if it misses
+  // first; then one optimization each for, per material, the lightest size that holds there and the next lighter ones
+  // (the found geometry may let them hold): 'opt-keep' sizes per material, 2 by default
   function materialSweep(kind: Kind, base: OptParams, vars: OptVar[], obj: Objective, st: Struct, which: string, armTotal: number | undefined, env3: Env3 | undefined) {
     const mats = Object.keys(BAR_MATS).filter((k) => which === 'all' || (which === 'metal') === !!BAR_MATS[k].metal);
     const all = mats.flatMap((mat) => sizesFor(mat).map((z) => ({ mat, size: z.label, arm: { mat, ...z.spec } as PartSpec })));
@@ -151,6 +151,7 @@ export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p:
     const variant = (arm: PartSpec): Struct => ({ ...st, spec: { ...st.spec, arm } });
     const n = Math.max(1, (navigator.hardwareConcurrency || 4) - 1), chunk = Math.ceil(all.length / n);
     const chunks = Array.from({ length: Math.ceil(all.length / chunk) }, (_, i) => all.slice(i * chunk, (i + 1) * chunk));
+    const keep = Math.min(6, Math.max(1, Math.round(Number($<HTMLInputElement>('opt-keep').value) || 2)));
     const us: number[] = [];
     status(`Triagem: ${all.length} combinações de material × bitola, um disparo cada…`);
     runPool(chunks.map((c): Request => ({ type: 'screen', kind, params: start, structs: c.map((x) => variant(x.arm)) })), {
@@ -160,7 +161,7 @@ export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p:
         const combos = mats.flatMap((mat) => {
           const list = all.map((x, i) => ({ ...x, u: us[i] })).filter((x) => x.mat === mat).sort((a, b) => mass(a) - mass(b));
           const k = list.findIndex((x) => x.u * st.fsMin <= 1);
-          return k < 0 ? [] : list.slice(Math.max(0, k - 1), k + 1);
+          return k < 0 ? [] : list.slice(Math.max(0, k + 1 - keep), k + 1);
         });
         if (!combos.length) return void status(`Nenhuma combinação aguenta com FS ≥ ${st.fsMin} no design atual. Tente FS menor, outro critério ou menos contrapeso.`);
         optimizeCombos(kind, base, vars, obj, st, combos, armTotal, env3, all.length);

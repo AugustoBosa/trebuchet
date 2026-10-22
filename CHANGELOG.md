@@ -2,9 +2,18 @@
 
 Simulador de trebuchets (Vite + TypeScript). Rodar: `npm run dev` · testes: `npm test` · build: `npm run build`.
 
+## 2026-10-22: flexão lateral no 3D, torre da polia, fechamento de pendências
+
+- **3D:** o solver 3D passa a calcular N, V e M ao longo das barras, mais a parte lateral (Vl, Ml: pino deslocado, vento de lado). A verificação do braço soma σ = N/A + M/W + Ml/Wl e usa o cisalhamento resultante. No plano os valores batem com o solver plano (`test/loads3d.test.ts`). Em desenho livre no 3D a verificação continua sem esforços.
+- **Torre da polia (MURLIN):** coluna engastada no chão, com flexão + normal e flambagem de Euler (2H). Seção e material na ficha "Tambor e corda do contrapeso". Só verifica quando você informa a seção.
+- **Esmagamento do furo** no aço segue a NBR 8800 (2,4·f_u; ÷ 1,35 no projeto); `fu` entrou nos metais.
+- **Otimizador:** "Bitolas otimizadas por material" (1 a 6, padrão 2).
+- O tambor espelhado no editor livre já funcionava (`camDir`); só havia um comentário velho.
+- **Não feito:** trilho dos floating arms. O modelo não tem comprimento nem seção do trilho (é um apoio infinito), então não há o que verificar sem inventar dados.
+
 ## Em aberto
 
-Só restam itens que dependem de dados que não existem em fonte pública. Retomar se aparecerem medidas.
+Só restam itens que dependem de dados que não existem em fonte pública (e o trilho dos floating arms, sem comprimento/seção no modelo). Retomar se aparecerem medidas.
 
 1. **Walking arm: 69 m contra 81 m do recorde (Stapleton, 2018).** A bola ainda parte do chão.
    - Segunda tentativa com a geometria do próprio autor (Instructables, passos 5 e 9): palitos num parafuso a 4″ do eixo, do lado do dedo, e a bola no canto entre eles e a borda do braço. Está guardada no branch `exp/walking-perch`.

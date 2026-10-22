@@ -179,6 +179,7 @@
               <label>FS mínimo<input type="number" id="opt-fs" value="1" min="1" max="10" step="0.1"></label>
             </div>
             <label>Material e seção do braço<select id="opt-mat"><option value="">os da ficha do braço</option><option value="all">varrer todos os materiais e bitolas comerciais</option><option value="wood">varrer só madeiras</option><option value="metal">varrer só metais</option></select></label>
+            <label>Bitolas otimizadas por material<input type="number" id="opt-keep" value="2" min="1" max="6" step="1"></label>
             <p class="muted">Com uma peça disponível de comprimento fixo, marque também "Distribuir o braço" acima e digite o comprimento dela. Na varredura, cada material × bitola ganha uma otimização própria, e a massa do braço passa a ser ρ·A·L.</p>
           </div>
           <div class="row"><button type="button" id="opt-run">Otimizar</button><button type="button" class="ghost" id="opt-stop" hidden>Parar</button></div>

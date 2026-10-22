@@ -277,7 +277,6 @@ export function createEditor(o: {
         sk.joints.push({ kind: 'cam', a: cw, b: a, at: s, r0: 0.8, r1: 0.2, span: Math.max(0.1, (2 * (c.c[1] - c.r)) / (0.8 + 0.2)) });
         // past the spiral's end the rope keeps paying out: the counterweight must land on the ground, as in the presets
         if (!sk.joints.some((j) => j.kind === 'floor' && j.a === cw)) sk.joints.push({ kind: 'floor', a: cw, at: [c.c[0], c.c[1]], y: c.r });
-        // ponytail: the drum unwinds as the arm turns clockwise (the presets' direction); a mirrored machine winds it up instead
       }
       sel = { type: 'joint', i: sk.joints.length - 1 };
     } else if (tool === 'pull') {

@@ -18,14 +18,15 @@ export interface BarMat {
   fm: number; // bending strength (wood: modulus of rupture; metal: yield), Pa
   fc0: number; // compression along the grain (metal: yield), Pa
   fv: number; // shear, Pa
+  fu?: number; // metals: tensile strength, Pa (hole bearing, NBR 8800)
   E: number; // modulus of elasticity, Pa
   note?: string; // which values are estimates
 }
 
 const wood = (label: string, rho: number, fm: number, fc0: number, fv: number, E: number, note?: string): BarMat =>
   ({ label, rho, fm: fm * 1e6, fc0: fc0 * 1e6, fv: fv * 1e6, E: E * 1e6, ...(note ? { note } : {}) });
-const metal = (label: string, rho: number, fy: number, E: number): BarMat =>
-  ({ label, metal: true, rho, fm: fy * 1e6, fc0: fy * 1e6, fv: (fy / Math.sqrt(3)) * 1e6, E: E * 1e6 });
+const metal = (label: string, rho: number, fy: number, E: number, fu: number): BarMat =>
+  ({ label, metal: true, rho, fm: fy * 1e6, fc0: fy * 1e6, fv: (fy / Math.sqrt(3)) * 1e6, fu: fu * 1e6, E: E * 1e6 });
 
 //                                                   ρ     fM     fc0    fv    E (MPa)
 export const BAR_MATS: Record<string, BarMat> = {
@@ -56,12 +57,12 @@ export const BAR_MATS: Record<string, BarMat> = {
   cedrinho: wood('Cedrinho', 590, 80.2, 42.2, 7.4, 10395),
   cedrorana: wood('Cedrorana', 520, 77.8, 46.6, 7.2, 12847),
   amesclao: wood('Amesclão', 520, 76.3, 44.1, 8.2, 9611),
-  'aco-1020': metal('Aço SAE 1020 (metalon, barra)', 7850, 210, 200000),
-  'aco-a36': metal('Aço ASTM A36 (perfis, chapas)', 7850, 250, 200000),
-  'aco-1045': metal('Aço SAE 1045 (eixos)', 7850, 310, 200000),
-  'inox-304': metal('Inox 304', 7900, 205, 193000),
-  'al-6063': metal('Alumínio 6063-T5 (perfis comuns)', 2700, 145, 69000),
-  'al-6061': metal('Alumínio 6061-T6', 2700, 276, 69000),
+  'aco-1020': metal('Aço SAE 1020 (metalon, barra)', 7850, 210, 200000, 380),
+  'aco-a36': metal('Aço ASTM A36 (perfis, chapas)', 7850, 250, 200000, 400),
+  'aco-1045': metal('Aço SAE 1045 (eixos)', 7850, 310, 200000, 565),
+  'inox-304': metal('Inox 304', 7900, 205, 193000, 515),
+  'al-6063': metal('Alumínio 6063-T5 (perfis comuns)', 2700, 145, 69000, 185),
+  'al-6061': metal('Alumínio 6061-T6', 2700, 276, 69000, 310),
 };
 export const METALS = Object.keys(BAR_MATS).filter((k) => BAR_MATS[k].metal);
 // materials of designs saved before this table (EN 338 classes, S235/S355): the nearest one here
