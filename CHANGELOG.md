@@ -17,6 +17,8 @@ Nada. Os itens que sobravam foram investigados a fundo em 2026-10-22 (texto, có
 
 ## 2026-10-22: Fiffer feito; walking arm, VLR, Merlin e BAKA investigados e fechados
 
+- **Limpeza do repositório.** Worktrees `feat-3d` e `materiais` removidos (travados por servidores Vite rodando dentro deles); branches `feat/3d` e `feat/materiais` apagados (já mesclados na `main`); entrada `trebuchet-lan` do `.claude/launch.json` removida (apontava para o worktree extinto). Ficou o branch `exp/walking-perch`. Scripts `atalhos/abrir.vbs` e `parar-servidor.vbs` commitados; `servidor.log` ignorado.
+- **Flexão lateral no 3D, torre da polia, NBR 8800 no furo, campo de bitolas do otimizador:** ver a seção de 2026-10-22 acima (primeira versão do dia).
 - **Fiffer (feito, `src/fiffer.ts`).** A fonte era o simulador publicado pelo próprio time First in Fright (github.com/treygreer/treb, `first_in_fright_2012/2013.py`), com toda a geometria (elos de 2,61 e 2,98 pés resolvidos pelo ângulo de 10°, biela de 10,45 pés, braço de 9 pés dobrado, rampa de 11 pés, queda de 5 pés) e as massas de cada peça. O "ponto morto" da reconstrução anterior era artefato de proporções estimadas: o ângulo de transmissão da biela vai de 26° a 180° sem travar.
   - **Validação** (`test/fiffer.test.ts`), rodando o simulador original (com PyQt stubado) na configuração 2026 (8 lb, funda 9,54 ft, 30°): com o pé do pórtico rígido, o original solta em 0,6783 s a 119,3 m/s; o nosso, em 0,6780 s a 118,7 m/s. Massa e inércia do braço batem exatamente (90,58 kg, 76,32 kg·m²). A energia total se conserva (0,5% dissipado).
   - O README deles dá 2.177 ft / 0,683 s / 116 m/s: o pé dianteiro do pórtico deles está numa mola amortecida que dissipa ~8% da energia. O nosso chão é rígido.
