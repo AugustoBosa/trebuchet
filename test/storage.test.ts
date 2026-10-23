@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { defaults } from '../src/presets';
-import { sanitize } from '../src/storage';
+import { decodeDesign, encodeDesign, sanitize } from '../src/storage';
 
 describe('sanitize (arquivo importado)', () => {
   it('aceita design válido e completa parâmetros faltantes com os padrões', () => {
@@ -28,5 +28,19 @@ describe('sanitize (arquivo importado)', () => {
     expect(d.kind).toBe('free');
     expect(d.sketch!.bodies).toHaveLength(1);
     expect(d.sketch!.joints).toHaveLength(0);
+  });
+});
+
+describe('link de compartilhamento', () => {
+  it('ida e volta: o design inteiro (nome com acento, parâmetros, material) sai igual', () => {
+    const d = sanitize({ name: 'Máquina açaí ✓', kind: 'hinged', params: { cwMass: 777.5, slingLength: 3.21 }, spec: { arm: { mat: 'ipe', size: '6x12' } }, breakMode: 'design' });
+    const back = decodeDesign(encodeDesign(d));
+    expect(back).toEqual(d);
+    expect(encodeDesign(d)).toMatch(/^[A-Za-z0-9_-]+$/); // fits a URL fragment as is
+  });
+
+  it('link quebrado ou malicioso é recusado', () => {
+    expect(() => decodeDesign('###')).toThrow();
+    expect(() => decodeDesign(encodeDesign({ kind: 'catapulta' } as never))).toThrow();
   });
 });

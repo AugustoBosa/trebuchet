@@ -164,7 +164,8 @@
         <fieldset id="opt">
           <legend>Otimizar</legend>
           <div class="row"><button type="button" class="ghost" id="opt-help-btn" aria-haspopup="dialog">ⓘ Como usar</button></div>
-          <label>Objetivo<select id="objective"><option value="range">Alcance</option><option value="efficiency">Eficiência</option><option value="lateral">Desvio lateral mínimo (3D)</option><option value="robust">Alcance robusto (3D)</option></select></label>
+          <label>Objetivo<select id="objective"><option value="range">Alcance</option><option value="efficiency">Eficiência</option><option value="target">Distância-alvo</option><option value="lateral">Desvio lateral mínimo (3D)</option><option value="robust">Alcance robusto (3D)</option></select></label>
+          <label id="opt-target-box" hidden>Distância-alvo (m)<input type="number" id="opt-target" value="100" min="1" step="1"></label>
           <p class="muted">Variáveis livres para o otimizador:</p>
           <div id="opt-vars"></div>
           <div id="opt-arm-box">
@@ -182,7 +183,7 @@
             <label>Bitolas otimizadas por material<input type="number" id="opt-keep" value="2" min="1" max="6" step="1"></label>
             <p class="muted">Com uma peça disponível de comprimento fixo, marque também "Distribuir o braço" acima e digite o comprimento dela. Na varredura, cada material × bitola ganha uma otimização própria, e a massa do braço passa a ser ρ·A·L.</p>
           </div>
-          <div class="row"><button type="button" id="opt-run">Otimizar</button><button type="button" class="ghost" id="opt-stop" hidden>Parar</button></div>
+          <div class="row"><button type="button" id="opt-run">Otimizar</button><button type="button" class="ghost" id="opt-pareto" title="Otimiza o alcance sob tetos cada vez menores para a força de pico no eixo e mostra o preço do alcance extra">Fronteira alcance × força no eixo</button><button type="button" class="ghost" id="opt-stop" hidden>Parar</button></div>
           <p id="opt-status" class="muted" role="status" aria-live="polite"></p>
           <div id="opt-result"></div>
           <h2>Varredura</h2>
@@ -199,7 +200,7 @@
             <h3>Passo a passo</h3>
             <ol>
               <li><b>Monte o design base.</b> Escolha o tipo de trebuchet e ajuste os controles do jeito que quer partir. Ele é o ponto de comparação ("atual") e fixa todas as variáveis não marcadas.</li>
-              <li><b>Escolha o objetivo.</b> <i>Alcance</i> maximiza a distância em metros. <i>Eficiência</i> maximiza o percentual da energia de entrada que o projétil leva na soltura. Os dois podem pedir designs diferentes.
+              <li><b>Escolha o objetivo.</b> <i>Alcance</i> maximiza a distância em metros. <i>Eficiência</i> maximiza o percentual da energia de entrada que o projétil leva na soltura. Os dois podem pedir designs diferentes. <i>Distância-alvo</i> não maximiza nada: procura os valores das variáveis livres que fazem o tiro cair a uma distância que você digita (por exemplo, "qual contrapeso e qual ângulo para 100 m"); a tabela mostra o erro em metros, e 0 é acertar na mosca. Com mais de uma variável há várias respostas, e a tabela lista as distintas.
                 <ul>
                   <li>Com a <b>Vista 3D</b> ligada, tudo roda no motor 3D, com o vento lateral e o pino que você definiu, e aparecem dois objetivos a mais. <i>Desvio lateral mínimo</i> procura o design que cai na linha do alvo. Marque a variável <i>Pino fora do centro</i> e ele acha o deslocamento do pino que compensa o vento (cada 10 cm de pino desvia cerca de 0,7 m num trebuchet de 5 m). Para vento forte, marque <i>Mira</i>: ela gira a máquina inteira, como faz uma equipe de verdade, e cada grau desloca a queda em cerca de 1/57 do alcance.</li>
                   <li><i>Alcance robusto</i> é a média menos o desvio-padrão do alcance em 5 tiros: o nominal, a soltura ±2° (a dispersão do pino) e uma rajada de ±3 m/s a favor ou contra. Ele prefere designs que perdem pouco quando algo varia. Cada avaliação custa 5 simulações, por isso é mais lento.</li>
@@ -215,6 +216,8 @@
               <li><b>Leia a tabela.</b> A linha <i>atual</i> é o seu design. <i>melhor</i>, #2, #3… são ótimos locais diferentes, do melhor para o pior. A coluna <i>achado</i> diz em quantas partidas a busca chegou àquele ponto: quanto maior, mais confiável. O percentual ao lado do resultado é o ganho sobre o design atual.</li>
               <li><b>Aplique.</b> O botão <i>Aplicar</i> de uma linha copia os valores para os controles e dispara o tiro completo, com passo de integração fino, então o resultado pode diferir por décimos de percentual do valor da busca.</li>
             </ol>
+            <h3>Fronteira alcance × força no eixo</h3>
+            <p>O botão <i>Fronteira alcance × força no eixo</i> otimiza o alcance e mede a força de pico no eixo; depois repete a busca com tetos de 85%, 70%, 55%, 40% e 30% dessa força. A tabela mostra só os designs que ninguém bate nos dois critérios: cada linha rende o maior alcance que achamos para aquela força, e dá o preço, em metros, de poupar o eixo. Usa as mesmas variáveis marcadas (e o braço total fixo, se marcado); só no motor plano.</p>
             <h3>Como interpretar o resultado</h3>
             <ul>
               <li>Um único ótimo, achado por quase todas as partidas, é provavelmente o melhor da faixa. Vários ótimos distintos pedem comparação: o melhor em número pode ser o mais sensível a erros de construção.</li>
@@ -251,6 +254,7 @@
           <button class="ghost" id="export">Exportar JSON</button>
           <label class="file">Importar JSON<input type="file" id="import" accept=".json,application/json"></label>
           <button class="ghost" id="csv">Dados (CSV)</button>
+          <button class="ghost" id="share" title="Copia um link com o design inteiro dentro dele (nada vai para um servidor)">Copiar link</button>
         </div>
       </fieldset>
     </aside>

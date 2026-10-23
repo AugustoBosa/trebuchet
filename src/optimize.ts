@@ -1,18 +1,20 @@
 import { RANGES } from './labels';
-import { simulate } from './physics/solver';
+import type { Mechanism } from './physics/model';
+import { simulate, type Result } from './physics/solver';
 import { apply3d, lift } from './physics3d/lift';
 import { simulate3 } from './physics3d/solver3';
 import { build, type Kind, type Params } from './presets';
 import { barMat, hasSection, section, type PartSpec } from './materials';
 import { assess, type Mode } from './structure';
 
-// 'lateral' and 'robust' need the 3D solver (env3 given)
-export type Objective = 'range' | 'efficiency' | 'lateral' | 'robust';
+// 'lateral' and 'robust' need the 3D solver (env3 given); 'target' hits a distance (OptParams.target) instead of maximizing
+export type Objective = 'range' | 'efficiency' | 'target' | 'lateral' | 'robust';
 export const FAST_DT = 2e-3; // ≤0.012% off the 1e-4 reference (release is interpolated), 4× cheaper than 5e-4; applied results are re-run at full accuracy
 
 // 3D conditions of the shot; pinOffset can also be an optimization variable (then it rides in the params)
 export interface Env3 { windZ: number; pinOffset: number; aimDeg: number }
-export type OptParams = Params & { pinOffset?: number; aimDeg?: number };
+// target: m to hit (objective 'target'); axleCap: N the axle may carry at most (the range × axle-load front); both ride in the params like pinOffset
+export type OptParams = Params & { pinOffset?: number; aimDeg?: number; target?: number; axleCap?: number };
 const RANGES3 = { pinOffset: [-0.5, 0.5], aimDeg: [-15, 15] } as const; // same limits as the 3D fields (±50 cm, ±15°)
 // robust range: release ±2° (the pin's timing scatter) and a ±3 m/s tail/head gust around the nominal shot
 const SCENARIOS = [{ dDeg: 0, windX: 0 }, { dDeg: 2, windX: 0 }, { dDeg: -2, windX: 0 }, { dDeg: 0, windX: 3 }, { dDeg: 0, windX: -3 }];
@@ -20,6 +22,24 @@ const SCENARIOS = [{ dDeg: 0, windX: 0 }, { dDeg: 2, windX: 0 }, { dDeg: -2, win
 // The parts may not break: material / section per part id (the part card's), criterion, minimum safety factor.
 export interface Struct { spec: Record<string, PartSpec>; mode: Mode; fsMin: number }
 const MARGIN = 1.01; // the search runs at FAST_DT; the full-accuracy shot's peaks differ by a fraction of that
+
+// planar score of a shot; a design whose axle would carry more than axleCap is scored down like a broken part
+const planarScore = (r: Result, m: Mechanism, objective: Objective, p: OptParams) => {
+  const v = objective === 'range' ? r.range : objective === 'efficiency' ? r.efficiency : 1 / (1 + Math.abs(r.range - (p.target ?? 0)));
+  const f = r.peakForce[m.axle];
+  return p.axleCap && f > p.axleCap ? v * (f / p.axleCap) ** -8 : v;
+};
+
+// peak reaction at the axle (N) of a quick planar shot; 0 when it doesn't shoot
+export function axlePeak(kind: Kind, p: OptParams): number {
+  try {
+    const m = build(kind, p);
+    const r = simulate(m, { afterRelease: 0, frameEvery: 1e9, dt: FAST_DT, tMax: 4 });
+    return r.error || !r.release ? 0 : r.peakForce[m.axle];
+  } catch {
+    return 0;
+  }
+}
 
 // a bar with a section weighs ρ·A·L: the arm (and the walking arm's leg) follow their length
 export function withSectionMass(p: OptParams, spec: Record<string, PartSpec>): OptParams {
@@ -41,20 +61,20 @@ export function structU(kind: Kind, p: OptParams, st: Struct): number {
   }
 }
 
-// Score to MAXIMIZE, 0 = failed shot. lateral → 1/(1+|drift|), best = 1; shownValue() turns it back into meters.
+// Score to MAXIMIZE, 0 = failed shot. lateral / target → 1/(1+|error|), best = 1; shownValue() turns it back into meters.
 // With st, a design whose parts would break is scored down steeply (×(u·FS_min)⁻⁸): continuous, so the search can
 // still walk back to the edge of what holds. ponytail: a penalty, not a hard constraint; the UI flags what still fails
 export function evaluate(kind: Kind, p: OptParams, objective: Objective, env3?: Env3, st?: Struct): number {
   if (!st) return score(kind, p, objective, env3);
   const q = withSectionMass(p, st.spec);
   let v: number, u: number;
-  if (!env3 && (objective === 'range' || objective === 'efficiency')) {
+  if (!env3 && (objective === 'range' || objective === 'efficiency' || objective === 'target')) {
     // one planar shot gives both the score and the loads
     try {
       const m = build(kind, q);
       const r = simulate(m, { afterRelease: 0, frameEvery: 1e9, dt: FAST_DT, tMax: 4, loadEvery: 1 });
       if (r.error || !r.release) return 0;
-      v = objective === 'range' ? r.range : r.efficiency;
+      v = planarScore(r, m, objective, p);
       u = Math.max(0, ...assess(m, r, st.spec, st.mode).checks.map((c) => c.u)) * st.fsMin * MARGIN;
     } catch {
       return 0;
@@ -73,9 +93,9 @@ function score(kind: Kind, p: OptParams, objective: Objective, env3?: Env3): num
     const opts = { afterRelease: 0, frameEvery: 1e9, dt: FAST_DT, tMax: 4 };
     if (!env3) {
       if (objective === 'lateral' || objective === 'robust') return 0;
-      const r = simulate(build(kind, p), opts);
-      if (r.error) return 0;
-      return objective === 'range' ? r.range : r.efficiency;
+      const m = build(kind, p);
+      const r = simulate(m, opts);
+      return r.error ? 0 : planarScore(r, m, objective, p);
     }
     const shot = (dDeg = 0, windX = 0) =>
       simulate3(apply3d(lift(build(kind, { ...p, releaseDeg: p.releaseDeg + dDeg })), { windZ: env3.windZ, windX, pinOffset: p.pinOffset ?? env3.pinOffset, aimDeg: p.aimDeg ?? env3.aimDeg }), opts);
@@ -88,7 +108,7 @@ function score(kind: Kind, p: OptParams, objective: Objective, env3?: Env3): num
     }
     const r = shot();
     if (r.error) return 0;
-    return objective === 'range' ? r.range : objective === 'efficiency' ? r.efficiency : 1 / (1 + Math.abs(r.lateral));
+    return objective === 'range' ? r.range : objective === 'efficiency' ? r.efficiency : objective === 'target' ? 1 / (1 + Math.abs(r.range - (p.target ?? 0))) : 1 / (1 + Math.abs(r.lateral));
   } catch {
     return 0; // impossible geometry scores zero
   }
@@ -96,13 +116,14 @@ function score(kind: Kind, p: OptParams, objective: Objective, env3?: Env3): num
 
 export const shotsPerEval = (o: Objective) => (o === 'robust' ? SCENARIOS.length : 1);
 
-// score → what the user reads: m, %, or the lateral drift in m
+// score → what the user reads: m, %, or the error (lateral drift, miss of the target) in m
 export const shownValue = (objective: Objective, v: number) =>
-  objective === 'efficiency' ? 100 * v : objective === 'lateral' ? (v > 0 ? 1 / v - 1 : Infinity) : v;
+  objective === 'efficiency' ? 100 * v : objective === 'lateral' || objective === 'target' ? (v > 0 ? 1 / v - 1 : Infinity) : v;
 
 // Box-bounded search: variables live in [0,1] and are mapped onto each slider's range.
 // 'armSplit' is not a parameter but a share: the fraction of a fixed beam (long + short arm = armTotal) given to the long arm.
-export type OptVar = keyof Params | 'armSplit' | 'pinOffset' | 'aimDeg';
+export type OptKey = keyof Params | 'pinOffset' | 'aimDeg'; // the parameters a variable can write
+export type OptVar = OptKey | 'armSplit';
 
 // Range of that fraction keeping both arms inside their slider limits (empty when lo > hi: the beam is too short or too long).
 export function armSplitRange(total: number): [number, number] {

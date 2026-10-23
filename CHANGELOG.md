@@ -2,6 +2,26 @@
 
 Simulador de trebuchets (Vite + TypeScript). Rodar: `npm run dev` · testes: `npm test` · build: `npm run build`.
 
+## 2026-10-23: validação do articulado contra um trebuchet instrumentado (`test/horsdal.test.ts`)
+
+Referência: Horsdal, Johnsen e Rasmussen (Aarhus), arXiv:2502.19442. Máquina pequena com sensores de rotação em braço, contrapeso e funda; a tabela 1 dá todos os parâmetros (viga não uniforme, I = 1,85 kg·m², centro de massa a 0,465 m do eixo).
+
+- **Aceleração inicial do braço:** 19,6 rad/s² sem projétil (medido 19,2) e 16,0 com 717 g (medido 16,0).
+- **Sem atrito, no vácuo:** 43,4 m e 32,6 m contra 42,8 m e 32,2 m do cálculo ab initio deles (+1,3 %). Energia conservada (0,3 %).
+- **Ponto de soltura do melhor alcance (717 g):** subida de 39° (deles 39,5°), altura 2,39 m (2,39 m), 0,79 m atrás do eixo (0,76 m), t = 0,593 s (0,593 s).
+- **Atrito dos mancais:** o solver dissipa 13,1 J (6,4 % de ΔU) com µ = 0,35 (R = 1,7 cm no eixo, 0,25 cm na articulação), e essa dissipação bate (< 5 %) com a integral da eq. (8) do artigo calculada sobre as próprias reações do solver. O artigo estima ~5 %. O teste falha se o µ do solver diferir (verificado com 0,20).
+- **Força no eixo:** pico de 156 kg-equivalentes (artigo: ~3·M·g ≈ 160, abaixo de 200).
+- **No ar e com atrito:** 38,4 m e 29,3 m, logo abaixo do ab initio sem atrito deles (39,5 e 30,6 m). Contra os tiros de campo (34,4 ± 1,5 m e 24,9 ± 1,5 m) o modelo fica 13 % e 18 % acima. É o limite do corpo rígido que o próprio artigo encontra (~4σ acima do campo; atribui o resto a flexão do cavalete e da viga, graus de liberdade ausentes). Não foi ajustado nada para fechar essa diferença.
+- **Funda de 0,93 m contra 0,87 m:** +4 % no modelo, +9 ± 6 % no campo.
+
+### Melhorias vindas da comparação com outros simuladores (jstreb, Trebuchator, VirtualTrebuchet)
+
+- **Distância-alvo** (objetivo do otimizador): acha os valores das variáveis livres que fazem o tiro cair a X m; a tabela mostra o erro em metros. Verificado no navegador: de 1000 kg (erro de 124 m) para 316 kg, erro 0,00 m, alvo de 60 m. Não faz "contrapeso mínimo para X m": com várias variáveis há várias respostas, e a tabela lista as distintas.
+- **Fronteira alcance × força no eixo:** otimiza o alcance sem teto e repete sob tetos de 85, 70, 55, 40 e 30 % da força que esse design pede (ε-restrição, `OptParams.axleCap`); lista só o que ninguém bate nos dois critérios. No fixo padrão (contrapeso, funda e ângulo livres): 292,6 m com 207 kN, 260,7 m com 62 kN, ou seja, 70 % menos força no eixo por 11 % menos alcance. Só no motor plano.
+- **Copiar link:** o design inteiro vai no fragmento da URL (`#d=…`, base64url do JSON, nunca sai do navegador), é sanitizado ao abrir e o fragmento é apagado logo depois para não ficar velho na primeira edição.
+- **README e CI** (GitHub Actions: `npm test` e `npm run build`). Timeout padrão do vitest subiu de 5 s para 30 s: os testes de física são pesados e estouravam com a máquina ocupada.
+- **Não feito:** Cd por Reynolds, Magnus e densidade por altitude (só importam para alcances longos e não há medida para validar); interface em inglês; "Gentlify" e força de pico no projétil (só para projétil frágil).
+
 ## 2026-10-22: flexão lateral no 3D, torre da polia, fechamento de pendências
 
 - **3D:** o solver 3D passa a calcular N, V e M ao longo das barras, mais a parte lateral (Vl, Ml: pino deslocado, vento de lado). A verificação do braço soma σ = N/A + M/W + Ml/Wl e usa o cisalhamento resultante. No plano os valores batem com o solver plano (`test/loads3d.test.ts`). Em desenho livre no 3D a verificação continua sem esforços.

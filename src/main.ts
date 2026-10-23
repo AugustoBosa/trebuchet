@@ -16,7 +16,7 @@ import { gaussian, scatterStats } from './physics3d/dispersion';
 import { seeded } from './optimize';
 import { initialState3, type Result3 } from './physics3d/solver3';
 import { compile, emptySketch, toSketch, type Sketch } from './sketch';
-import { deleteDesign, download, importFile, listDesigns, loadCurrent, saveCurrent, saveDesign, type Design } from './storage';
+import { decodeDesign, deleteDesign, download, encodeDesign, importFile, listDesigns, loadCurrent, saveCurrent, saveDesign, type Design } from './storage';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const form = $<HTMLFormElement>('params');
@@ -782,9 +782,31 @@ $('csv').addEventListener('click', () => {
   download(`${design().name}.csv`, ['t (s),' + cols.join(','), ...rows].join('\n'), 'text/csv');
 });
 
+$('share').addEventListener('click', async (e) => {
+  const url = `${location.href.split(/[#?]/)[0]}#d=${encodeDesign(design())}`;
+  const btn = e.currentTarget as HTMLButtonElement;
+  try {
+    await navigator.clipboard.writeText(url);
+    btn.textContent = 'Link copiado';
+    setTimeout(() => (btn.textContent = 'Copiar link'), 2000);
+  } catch {
+    prompt('Copie o link do design:', url); // no clipboard access (insecure page, blocked)
+  }
+});
+
 const saved = loadCurrent();
 const want = new URLSearchParams(location.search).get('kind') as Kind | null; // deep link from the article: ./?kind=walking
-if (want && want in KINDS) {
+let linked: Design | undefined; // a design shared by link: #d=…
+if (location.hash.startsWith('#d=')) {
+  try {
+    linked = decodeDesign(location.hash.slice(3));
+  } catch {
+    $('err').textContent = 'O link do design está quebrado ou incompleto.';
+  }
+  history.replaceState(null, '', location.pathname + location.search); // the fragment goes stale at the first edit
+}
+if (linked) load(linked);
+else if (want && want in KINDS) {
   kindSel.value = want;
   Object.assign(params, defaultsFor(want));
   buildForm();

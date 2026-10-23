@@ -4,7 +4,7 @@ import type { Kind, Params } from './presets';
 
 export type Request =
   | { type: 'optimize'; kind: Kind; params: OptParams; vars: OptVar[]; armTotal?: number; objective: Objective; maxEvals?: number; env3?: Env3; struct?: Struct }
-  | { type: 'sweep'; kind: Kind; params: Params; x: keyof Params; y?: keyof Params; objective: Objective; env3?: Env3 }
+  | { type: 'sweep'; kind: Kind; params: OptParams; x: keyof Params; y?: keyof Params; objective: Objective; env3?: Env3 }
   | { type: 'screen'; kind: Kind; params: OptParams; structs: Struct[] }; // worst utilization of each variant, one quick shot each
 
 export type Reply =

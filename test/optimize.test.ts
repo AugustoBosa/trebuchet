@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { armSplitRange, distinctOptima, evaluate, latinHypercube, nelderMead, paramMapper, seeded } from '../src/optimize';
+import { armSplitRange, axlePeak, distinctOptima, evaluate, latinHypercube, nelderMead, paramMapper, seeded, shownValue } from '../src/optimize';
 import { simulate } from '../src/physics/solver';
 import { build, defaults } from '../src/presets';
 
@@ -76,5 +76,31 @@ describe('multi-start', () => {
     expect(opt[0].u[0]).toBeCloseTo(0.2, 2);
     expect(opt[1].u[0]).toBeCloseTo(0.8, 2);
     expect(opt[0].count + opt[1].count).toBe(8);
+  });
+});
+
+describe('distância-alvo e teto de força no eixo', () => {
+  const base = { ...defaults, cwMass: 600 };
+
+  it('o contrapeso que acerta 70% do alcance atual cai a menos de 1 m do alvo', () => {
+    const target = 0.7 * evaluate('hinged', base, 'range');
+    const map = paramMapper({ ...base, target }, ['cwMass']);
+    const res = nelderMead((u) => -evaluate('hinged', map.toParams(u), 'target'), map.toUnit(base), { maxEvals: 80, step: 0.02 });
+    const hit = evaluate('hinged', map.toParams(res.x), 'range');
+    expect(Math.abs(hit - target)).toBeLessThan(1);
+    expect(shownValue('target', -res.fx)).toBeLessThan(1); // the table's number is that error, in m
+  });
+
+  it('com teto no eixo, o ótimo respeita o teto e custa alcance', () => {
+    const vars = ['cwMass', 'slingLength', 'releaseDeg'] as const;
+    const free = nelderMead((u) => -evaluate('hinged', paramMapper(base, [...vars]).toParams(u), 'range'), paramMapper(base, [...vars]).toUnit(base), { maxEvals: 120 });
+    const best = paramMapper(base, [...vars]).toParams(free.x);
+    const cap = 0.6 * axlePeak('hinged', best);
+    const capped = { ...best, axleCap: cap };
+    const map = paramMapper(capped, [...vars]);
+    const res = nelderMead((u) => -evaluate('hinged', map.toParams(u), 'range'), map.toUnit(capped), { maxEvals: 120 });
+    const p = map.toParams(res.x);
+    expect(axlePeak('hinged', p)).toBeLessThan(cap * 1.05);
+    expect(evaluate('hinged', { ...p, axleCap: undefined }, 'range')).toBeLessThan(-free.fx);
   });
 });

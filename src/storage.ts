@@ -88,3 +88,7 @@ export function download(filename: string, text: string, type = 'application/jso
 export async function importFile(file: File): Promise<Design> {
   return sanitize(JSON.parse(await file.text()));
 }
+
+// A design inside a link's fragment (it never reaches a server): base64url of its JSON, sanitized again on the way in.
+export const encodeDesign = (d: Design) => btoa(Array.from(new TextEncoder().encode(JSON.stringify(d)), (b) => String.fromCharCode(b)).join('')).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
+export const decodeDesign = (s: string): Design => sanitize(JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(s.replaceAll('-', '+').replaceAll('_', '/')), (c) => c.charCodeAt(0)))));

@@ -1,6 +1,6 @@
 import { css, drawChart, drawHeatmap, heatCell, timeAt, type ChartSpec, type HeatSpec } from './charts';
 import { LABELS, RANGES } from './labels';
-import { armSplitRange, distinctOptima, evaluate, latinHypercube, paramMapper, shotsPerEval, shownValue, withSectionMass, type Env3, type Objective, type OptParams, type OptVar, type Struct } from './optimize';
+import { armSplitRange, axlePeak, distinctOptima, evaluate, latinHypercube, paramMapper, shotsPerEval, shownValue, withSectionMass, type Env3, type Objective, type OptKey, type OptParams, type OptVar, type Struct } from './optimize';
 import { BAR_MATS, sizesFor, type PartSpec } from './materials';
 import type { Mode } from './structure';
 import type { Reply, Request } from './optimize.worker';
@@ -10,8 +10,8 @@ const ENVIRONMENT: (keyof Params)[] = ['airDensity', 'dragCd', 'axleMu', 'axleRa
 const DEFAULT_ON: (keyof Params)[] = ['slingLength', 'releaseDeg'];
 const STARTS = 8; // current design + 7 Latin-hypercube points
 
-const OBJECTIVE_NAMES: Record<Objective, string> = { range: 'Alcance', efficiency: 'Eficiência', lateral: 'Desvio lateral', robust: 'Alcance robusto' };
-const label = (k: keyof OptParams) => (k === 'pinOffset' ? 'Pino fora do centro (m)' : k === 'aimDeg' ? 'Mira (°)' : LABELS[k]);
+const OBJECTIVE_NAMES: Record<Objective, string> = { range: 'Alcance', efficiency: 'Eficiência', target: 'Erro até o alvo', lateral: 'Desvio lateral', robust: 'Alcance robusto' };
+const label = (k: OptKey) => (k === 'pinOffset' ? 'Pino fora do centro (m)' : k === 'aimDeg' ? 'Mira (°)' : LABELS[k]);
 
 // env3: the 3D conditions while the 3D view is on (then everything runs on the 3D solver), else undefined.
 // apply3d: write optimized 3D settings (pin offset in m, aim in degrees) back to the 3D fields.
@@ -26,7 +26,7 @@ export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p:
   const objective = () => $<HTMLSelectElement>('objective').value as Objective;
   const shown = (v: number) => shownValue(objective(), v);
   const unit = () => (objective() === 'efficiency' ? '%' : 'm');
-  const fmt = (v: number) => `${shown(v).toFixed(objective() === 'lateral' ? 2 : 1)} ${unit()}`;
+  const fmt = (v: number) => `${shown(v).toFixed(objective() === 'lateral' || objective() === 'target' ? 2 : 1)} ${unit()}`;
   // 'lateral' and 'robust' only exist on the 3D solver
   const needs3d = () => (objective() === 'lateral' || objective() === 'robust') && !o.env3() && (status('Esse objetivo usa o motor 3D: ligue a "Vista 3D" primeiro.'), true);
   const status = (t: string) => ($('opt-status').textContent = t);
@@ -103,10 +103,16 @@ export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p:
     : undefined;
   $('opt-mat').addEventListener('change', () => $<HTMLSelectElement>('opt-mat').value && ($<HTMLInputElement>('opt-struct').checked = true));
 
-  $('opt-run').addEventListener('click', () => {
+  // 'target': the distance to hit, in m (empty or ≤ 0 is refused)
+  const targetM = () => (Number($<HTMLInputElement>('opt-target').value) > 0 ? Number($<HTMLInputElement>('opt-target').value) : undefined);
+  $('objective').addEventListener('change', () => ($('opt-target-box').hidden = objective() !== 'target'));
+
+  // What the Otimizar and Fronteira buttons share: the free variables, the base design (with the target) and the mapper.
+  // Undefined, with the reason in the status line, when something is off. forceRange: the front ignores the objective menu.
+  function setup(forceRange = false) {
     const arm = $<HTMLInputElement>('opt-arm').checked;
     const armTotal = Number($<HTMLInputElement>('opt-arm-total').value);
-    if (needs3d()) return;
+    if (!forceRange && needs3d()) return;
     const env3 = o.env3();
     const vars: OptVar[] = [...$('opt-vars').querySelectorAll<HTMLInputElement>('input:checked')].map((i) => i.value as OptVar);
     if (arm) {
@@ -115,14 +121,68 @@ export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p:
       vars.push('armSplit');
     }
     if (!vars.length) return void status('Marque ao menos uma variável.');
+    const aim = !forceRange && objective() === 'target';
+    const target = aim ? targetM() : undefined;
+    if (aim && !target) return void status('Digite a distância-alvo, em metros.');
     $('opt-result').innerHTML = '';
-    const base: OptParams = { ...o.params, ...(env3 ? { pinOffset: env3.pinOffset, aimDeg: env3.aimDeg } : {}) };
-    const map = paramMapper(base, vars, arm ? armTotal : undefined);
-    const kind = o.kind();
-    const obj = objective();
+    const base: OptParams = { ...o.params, ...(env3 ? { pinOffset: env3.pinOffset, aimDeg: env3.aimDeg } : {}), ...(target ? { target } : {}) };
+    return { armTotal: arm ? armTotal : undefined, env3, vars, base, map: paramMapper(base, vars, arm ? armTotal : undefined), kind: o.kind(), obj: objective() };
+  }
+
+  // Range × axle load front (ε-constraint): the best range with no cap, then the best range with the axle capped at
+  // 85, 70, 55, 40 and 30 % of the force that design needs. Only what nobody beats on both is listed.
+  $('opt-pareto').addEventListener('click', () => {
+    const s = setup(true);
+    if (!s) return;
+    const { armTotal, env3, vars, base, map, kind } = s;
+    if (env3) return void status('A fronteira usa o motor plano: desligue a "Vista 3D".');
+    const req = (params: OptParams): Request => ({ type: 'optimize', kind, params, vars, objective: 'range', maxEvals: 30 + 25 * vars.length, ...(armTotal !== undefined ? { armTotal } : {}) });
+    const won = (r: Reply): r is Extract<Reply, { type: 'optimized' }> => r.type === 'optimized' && r.value > 0;
+    let evals = 0;
+    const tops: Extract<Reply, { type: 'optimized' }>[] = [];
+    status(`Fronteira: achando o melhor alcance sem teto, ${STARTS} partidas…`);
+    runPool([map.toUnit(base), ...latinHypercube(STARTS - 1, vars.length)].map((u) => req(map.toParams(u))), {
+      each: (r) => won(r) && (tops.push(r), (evals += r.evals)),
+      done: () => {
+        const top = tops.sort((a, b) => b.value - a.value)[0];
+        if (!top) return void status('Nenhuma partida deu um disparo válido. Revise o design.');
+        const f0 = axlePeak(kind, top.params);
+        const rows = [top.params];
+        status(`Fronteira: sem teto o eixo leva ${(f0 / 1000).toFixed(1)} kN. Repetindo sob tetos menores…`);
+        runPool([0.85, 0.7, 0.55, 0.4, 0.3].map((c) => req({ ...top.params, axleCap: c * f0 })), {
+          each: (r) => won(r) && (rows.push(r.params), (evals += r.evals)),
+          done: () => showFront(kind, vars, rows, evals),
+        });
+      },
+    });
+  });
+
+  function showFront(kind: Kind, optVars: OptVar[], rows: OptParams[], evals: number) {
+    const cols = optVars.flatMap((v): OptKey[] => (v === 'armSplit' ? ['longArm', 'shortArm'] : [v]));
+    const pts = rows.map((r) => {
+      const p = { ...r, axleCap: undefined }; // the true range and force of the design, without the cap's penalty
+      return { p, range: evaluate(kind, p, 'range'), peak: axlePeak(kind, p) };
+    }).filter((x) => x.range > 0);
+    const front = pts.filter((a) => !pts.some((b) => b.range >= a.range && b.peak <= a.peak && (b.range > a.range || b.peak < a.peak))).sort((a, b) => b.peak - a.peak);
+    status(`Fronteira: ${front.length} designs que ninguém bate nos dois critérios (${evals} simulações). Cada linha é o maior alcance achado para aquela força no eixo.`);
+    $('opt-result').innerHTML = `<table>
+      <tr><th>Força de pico no eixo (kN)</th><th>Alcance</th>${cols.map((k) => `<th>${label(k)}</th>`).join('')}<th></th></tr>
+      ${front.map((x, i) => `<tr><td>${(x.peak / 1000).toFixed(1)}</td><td><b>${x.range.toFixed(1)} m</b></td>${cols.map((k) => `<td>${+(x.p[k] ?? 0).toPrecision(4)}</td>`).join('')}
+        <td><button type="button" class="ghost" data-front="${i}">Aplicar</button></td></tr>`).join('')}
+    </table>`;
+    $('opt-result').querySelectorAll<HTMLButtonElement>('[data-front]').forEach((b) =>
+      b.addEventListener('click', () => o.apply(Object.fromEntries(cols.map((k) => [k, +(front[Number(b.dataset.front)].p[k] ?? 0).toPrecision(4)])) as Partial<Record<OptKey, number>>)),
+    );
+  }
+
+  $('opt-run').addEventListener('click', () => {
+    const s = setup();
+    if (!s) return;
+    const { armTotal, env3, vars, base, map, kind, obj } = s;
+    const arm = armTotal !== undefined;
     const st = struct();
     const sweep = $<HTMLSelectElement>('opt-mat').value;
-    if (sweep && st) return materialSweep(kind, base, vars, obj, st, sweep, arm ? armTotal : undefined, env3);
+    if (sweep && st) return materialSweep(kind, base, vars, obj, st, sweep, armTotal, env3);
     const startsU = [map.toUnit(base), ...latinHypercube(STARTS - 1, vars.length)];
     const reqs: Request[] = startsU.map((u) => ({ type: 'optimize', kind, params: map.toParams(u), vars, objective: obj, maxEvals: 30 + 25 * vars.length, ...(arm ? { armTotal } : {}), ...(env3 ? { env3 } : {}), ...(st ? { struct: st } : {}) }));
     const found: { u: number[]; value: number; params: OptParams; fs?: number }[] = [];
@@ -187,7 +247,7 @@ export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p:
         const crit = st.mode === 'rupture' ? 'ruptura' : 'projeto (NBR)';
         if (!ok.length) return void status(`Nenhuma das ${combos.length} combinações aguenta com FS ≥ ${st.fsMin} (${crit}). Tente FS menor, outro critério ou menos contrapeso.`);
         status(`${screened} combinações na triagem, ${combos.length} otimizadas (${evals} simulações): ${ok.length} aguentam com FS ≥ ${st.fsMin} (${crit}). As melhores:`);
-        const cols = vars.flatMap((v): (keyof OptParams)[] => (v === 'armSplit' ? ['longArm', 'shortArm'] : [v]));
+        const cols = vars.flatMap((v): OptKey[] => (v === 'armSplit' ? ['longArm', 'shortArm'] : [v]));
         $('opt-result').innerHTML = `<table>
           <tr><th>Material</th><th>Bitola</th><th>Massa do braço (kg)</th>${cols.map((k) => `<th>${label(k)}</th>`).join('')}<th>${OBJECTIVE_NAMES[obj]}</th><th>FS</th><th></th></tr>
           ${ok.slice(0, 12).map((x, i) => `<tr><td>${BAR_MATS[x.c.mat].label}${BAR_MATS[x.c.mat].note ? ` <span class="muted" title="Valores estimados: ${BAR_MATS[x.c.mat].note}">(est.)</span>` : ''}</td><td>${x.c.size}</td><td>${x.params.armMass.toFixed(1)}</td>
@@ -197,7 +257,7 @@ export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p:
         $('opt-result').querySelectorAll<HTMLButtonElement>('[data-mat]').forEach((b) =>
           b.addEventListener('click', () => {
             const x = ok[Number(b.dataset.mat)];
-            const { pinOffset, aimDeg, ...rest } = Object.fromEntries([...cols, 'armMass', 'legMass'].map((k) => [k, +(x.params[k as keyof OptParams] ?? 0).toPrecision(5)])) as Partial<OptParams>;
+            const { pinOffset, aimDeg, ...rest } = Object.fromEntries([...cols, 'armMass', 'legMass'].map((k) => [k, +(x.params[k as keyof OptParams] ?? 0).toPrecision(5)])) as Partial<Record<OptKey, number>>;
             o.apply3d({ pinOffset, aimDeg });
             o.applyArm(x.c.arm, st.mode);
             o.apply(rest);
@@ -208,7 +268,7 @@ export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p:
   }
 
   function showOptima(optVars: OptVar[], all: ReturnType<typeof distinctOptima<{ u: number[]; value: number; params: OptParams; fs?: number }>>, current: number, evals: number, base: OptParams, armTotal?: number, st?: Struct) {
-    const vars = optVars.flatMap((v): (keyof OptParams)[] => (v === 'armSplit' ? ['longArm', 'shortArm'] : [v])); // table columns
+    const vars = optVars.flatMap((v): OptKey[] => (v === 'armSplit' ? ['longArm', 'shortArm'] : [v])); // table columns
     const name = OBJECTIVE_NAMES[objective()];
     const sum = +(o.params.longArm + o.params.shortArm).toFixed(3);
     if (!all.length) return void status(`Nenhuma das ${STARTS} partidas produziu um disparo válido. ` +
@@ -216,7 +276,7 @@ export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p:
     // optima far below the best are dead ends (often stuck on a slider limit): count them, don't list them
     const optima = all.filter((op) => op.value >= 0.5 * all[0].value);
     const stuck = STARTS - optima.reduce((n, op) => n + op.count, 0);
-    const gain = (v: number) => (current > 0 && objective() !== 'lateral' ? ` <span class="muted">(${v >= current ? '+' : ''}${((100 * (v - current)) / current).toFixed(1)}%)</span>` : '');
+    const gain = (v: number) => (current > 0 && objective() !== 'lateral' && objective() !== 'target' ? ` <span class="muted">(${v >= current ? '+' : ''}${((100 * (v - current)) / current).toFixed(1)}%)</span>` : '');
     const stuckNote = stuck ? ` ${stuck} partida(s) terminaram em designs que falham ou rendem menos da metade, e foram omitidas.` : '';
     status((optima.length === 1
       ? `${STARTS} partidas, ${evals} simulações: todas as que deram certo chegaram ao mesmo ótimo, provavelmente o global nessa faixa.`
@@ -232,8 +292,8 @@ export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p:
     $('opt-result').querySelectorAll<HTMLButtonElement>('[data-opt]').forEach((b) =>
       b.addEventListener('click', () => {
         const op = optima[Number(b.dataset.opt)];
-        const keys: (keyof OptParams)[] = st ? [...vars, 'armMass', 'legMass'] : vars; // a section's mass follows the found lengths
-        const { pinOffset, aimDeg, ...rest } = Object.fromEntries(keys.map((k) => [k, +(op.params[k] ?? 0).toPrecision(st && (k === 'armMass' || k === 'legMass') ? 5 : 4)])) as Partial<OptParams>;
+        const keys: OptKey[] = st ? [...vars, 'armMass', 'legMass'] : vars; // a section's mass follows the found lengths
+        const { pinOffset, aimDeg, ...rest } = Object.fromEntries(keys.map((k) => [k, +(op.params[k] ?? 0).toPrecision(st && (k === 'armMass' || k === 'legMass') ? 5 : 4)])) as Partial<Record<OptKey, number>>;
         o.apply3d({ pinOffset, aimDeg }); // before apply(): it re-runs the shot with the fields' values
         if (st) o.applyArm(undefined, st.mode);
         o.apply(rest);
@@ -248,7 +308,7 @@ export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p:
     if (needs3d()) return;
     const title = OBJECTIVE_NAMES[objective()];
     const env3 = o.env3();
-    start({ type: 'sweep', kind: o.kind(), params: { ...o.params }, x, y, objective: objective(), ...(env3 ? { env3 } : {}) }, (r) => {
+    start({ type: 'sweep', kind: o.kind(), params: { ...o.params, ...(objective() === 'target' ? { target: targetM() } : {}) }, x, y, objective: objective(), ...(env3 ? { env3 } : {}) }, (r) => {
       if (r.type !== 'swept') return;
       status(`Varredura concluída: ${r.z.flat().length * shotsPerEval(objective())} simulações. Clique no gráfico para aplicar um ponto.`);
       sweepCanvas.hidden = false;
