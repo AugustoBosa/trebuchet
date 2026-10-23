@@ -398,6 +398,7 @@ export function createEditor(o: {
     if (sel) html += `<button type="button" class="ghost" data-act="delete">Apagar seleção</button>`;
     html += `<h2>Disparo</h2>` + field('Ângulo de liberação (°)', 'g.releaseDeg', sk.releaseDeg) + field('Densidade do ar', 'g.airDensity', sk.airDensity) +
       field('Coef. de arrasto Cd', 'g.dragCd', sk.dragCd) + field('Atrito na calha μ', 'g.troughMu', sk.troughMu) +
+      field('Massa da funda: bolsa + cordas (kg)', 'g.slingMass', sk.slingMass ?? 0) +
       field('Restituição dos impactos (e)', 'g.restitution', sk.restitution ?? 0);
     o.panel.innerHTML = html;
     validate();

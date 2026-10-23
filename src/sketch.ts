@@ -35,6 +35,7 @@ export interface Sketch {
   dragCd: number;
   troughMu: number;
   restitution?: number; // e of the parts' impacts (0 = they thud)
+  slingMass?: number; // kg, pouch + cords: swing with the projectile, stay behind at release (Params.slingMass)
 }
 
 export const emptySketch = (): Sketch => ({ bodies: [], joints: [], releaseDeg: 45, airDensity: 1.225, dragCd: 0.47, troughMu: 0.3 });
@@ -87,13 +88,14 @@ export function compile(sk: Sketch): Mechanism {
   if (projectile < 0) throw new Error('Falta o projétil: use a ferramenta "Projétil".');
   const loose = detachedJoints(sk).length;
   if (loose) throw new Error(`${loose} conexão(ões) solta(s), marcada(s) em vermelho: o ponto da junta não toca a peça. Arraste-o de volta ou apague a junta.`);
-  const bodies: Body[] = sk.bodies.map((b) => {
+  const pouch = Math.max(0, sk.slingMass ?? 0);
+  const bodies: Body[] = sk.bodies.map((b, i) => {
     const { pos, angle } = pose(b);
     if (b.kind === 'rod') {
       const L = dist(b.a, b.b);
       return { name: b.name, mass: b.mass, inertia: (b.mass * L * L) / 12, pos, angle, shape: { kind: 'rod', length: L } };
     }
-    return { name: b.name, mass: b.mass, inertia: (b.role === 'projectile' ? 0.4 : 0.5) * b.mass * b.r * b.r, pos, angle, shape: { kind: 'disk', radius: b.r } };
+    return { name: b.name, mass: b.mass + (i === projectile ? pouch : 0), inertia: (b.role === 'projectile' ? 0.4 : 0.5) * b.mass * b.r * b.r, pos, angle, shape: { kind: 'disk', radius: b.r } };
   });
   const loc = (i: number | 'ground', w: Vec): Vec => (i === 'ground' ? w : toLocal(sk.bodies[i], w));
   const pulls = sk.joints.flatMap((j) =>
@@ -150,6 +152,7 @@ export function compile(sk: Sketch): Mechanism {
     releaseAngle: (sk.releaseDeg * Math.PI) / 180,
     air: { density: sk.airDensity, cd: sk.dragCd },
     ...(sk.restitution ? { restitution: Math.min(0.95, Math.max(0, sk.restitution)) } : {}),
+    ...(pouch ? { pouch } : {}),
   };
 }
 
@@ -197,7 +200,7 @@ export function toSketch(m: Mechanism, extra: { troughMu: number }): Sketch {
       return { kind: 'rod', name: b.name, a: world(q, i, [-L, 0]), b: world(q, i, [L, 0]), mass: b.mass };
     }
     const role: Role | undefined = i === m.projectile ? 'projectile' : i === m.counterweight ? 'counterweight' : undefined;
-    return { kind: 'disk', name: b.name, c: [b.pos[0], b.pos[1]], r: b.shape.radius, mass: b.mass, ...(role ? { role } : {}) };
+    return { kind: 'disk', name: b.name, c: [b.pos[0], b.pos[1]], r: b.shape.radius, mass: b.mass - (i === m.projectile ? m.pouch ?? 0 : 0), ...(role ? { role } : {}) };
   });
   const w = (i: number | 'ground', p: Vec): Vec => (i === 'ground' ? [p[0], p[1]] : world(q, i, p));
   const hangers: SJoint[] = [];
@@ -250,7 +253,7 @@ export function toSketch(m: Mechanism, extra: { troughMu: number }): Sketch {
     const at = w(pl.body, pl.local);
     joints.push({ kind: 'pull', a: pl.body, at, force: pl.force, stroke: at[1] - pl.untilY });
   }
-  return { bodies, joints, releaseDeg: (m.releaseAngle * 180) / Math.PI, airDensity: m.air.density, dragCd: m.air.cd, troughMu: extra.troughMu, ...(m.restitution ? { restitution: m.restitution } : {}) };
+  return { bodies, joints, releaseDeg: (m.releaseAngle * 180) / Math.PI, airDensity: m.air.density, dragCd: m.air.cd, troughMu: extra.troughMu, ...(m.restitution ? { restitution: m.restitution } : {}), ...(m.pouch ? { slingMass: m.pouch } : {}) };
 }
 
 // Every coordinate in the sketch, so coincident points can be dragged together.
@@ -347,5 +350,7 @@ export function sanitizeSketch(raw: unknown): Sketch {
   sk.troughMu = Math.max(0, num(r.troughMu, 0.3));
   const e = Math.min(0.95, Math.max(0, num(r.restitution, 0)));
   if (e) sk.restitution = e;
+  const sm = Math.max(0, num(r.slingMass, 0));
+  if (sm) sk.slingMass = sm;
   return sk;
 }

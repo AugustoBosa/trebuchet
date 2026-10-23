@@ -3,6 +3,7 @@ import { simulate } from '../src/physics/solver';
 import { lift } from '../src/physics3d/lift';
 import { simulate3 } from '../src/physics3d/solver3';
 import { build, defaultsFor } from '../src/presets';
+import { compile, sanitizeSketch, toSketch } from '../src/sketch';
 
 // The sling's pouch and cords swing with the stone and stay in the sling at release.
 describe('funda com massa', () => {
@@ -22,6 +23,19 @@ describe('funda com massa', () => {
     const pouch = shot({ slingMass: 1 }), heavy = shot({ projMass: 11 });
     expect(pouch.release!.speed).toBeCloseTo(heavy.release!.speed, 2); // same swing (the pre-release drag acts on the same stone)
     expect(pouch.range).toBeLessThan(heavy.range);
+  });
+
+  it('editor livre: o esboço do preset guarda a bolsa e dá o mesmo tiro, também depois de salvo e lido', () => {
+    const m = build('hinged', { ...p, slingMass: 1 });
+    const sk = toSketch(m, { troughMu: p.troughMu });
+    expect(sk.slingMass).toBe(1);
+    expect(sk.bodies[m.projectile].mass).toBeCloseTo(10, 9); // the disk is the stone
+    const r = simulate(m, { afterRelease: 0 });
+    for (const s of [sk, sanitizeSketch(JSON.parse(JSON.stringify(sk)))]) {
+      const c = simulate(compile(s), { afterRelease: 0 });
+      expect(Math.abs(c.range - r.range) / r.range).toBeLessThan(0.005);
+      expect(c.efficiency).toBeCloseTo(r.efficiency, 3);
+    }
   });
 
   it('o solver 3D faz o mesmo', () => {
