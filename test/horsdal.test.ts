@@ -43,6 +43,43 @@ function horsdal(m: number, l4 = 0.87, friction = true, air = false, ib = IB, tr
   return mech;
 }
 
+// Beam bending as a pseudo-rigid-body model: the beam is cut at the axle into two rigid halves, both on the axle, joined by
+// a torsional spring. Each half bends like a cantilever clamped at the axle with its end load: the end of a half of length L
+// moves M·L²/(3EI), a rigid turn of M·L/(3EI); the two add up, so k = 3EI/(L1 + L2). With that, the deflection at the pivot
+// relative to the chord is the paper's uP formula exactly (table 4). Mass: the short half is a piece of a uniform beam
+// (4.05 kg over 1.225 m; the other 0.81 kg as a tip mass reproduce the measured CoM and I within 2 %), the long half takes the
+// rest, so the total mass, CoM and inertia about the axle are unchanged. The spring starts preloaded by the hanging
+// counterweight. ponytail: one hinge at the axle (where the curvature peaks) and no beam damping; the inertia loads along
+// the beam bend it too, and are not in k.
+function flexible(mech: Mechanism, EI: number): Mechanism {
+  const arm = mech.bodies[0], e: [number, number] = [Math.cos(arm.angle), Math.sin(arm.angle)];
+  const piv: [number, number] = [arm.pos[0] - LCM * e[0], arm.pos[1] - LCM * e[1]];
+  const ms = (4.047 * L2) / (L1 + L2), xs = -L2 / 2; // short half, CoM from the axle
+  const ml = MB - ms, xl = (MB * LCM - ms * xs) / ml; // long half
+  const at = (x: number) => [piv[0] + x * e[0], piv[1] + x * e[1]] as [number, number];
+  const S = mech.bodies.length;
+  Object.assign(arm, { mass: ml, inertia: IB - (ms * L2 * L2) / 3 - ml * xl * xl, pos: at(xl), shape: { kind: 'rod', length: 2 * (L1 - xl) } });
+  mech.bodies.push({ name: 'braço curto', mass: ms, inertia: (ms * L2 * L2) / 12, pos: at(xs), angle: arm.angle, shape: { kind: 'rod', length: L2 } });
+  // locals on the beam were measured from LCM: re-measure from the half that point now belongs to
+  const move = (body: number, p: [number, number]): [number, [number, number]] => {
+    if (body !== 0) return [body, p];
+    const x = p[0] + LCM;
+    return x < -1e-9 ? [S, [x - xs, p[1]]] : [0, [x - xl, p[1]]];
+  };
+  mech.joints = mech.joints.map((j): Joint => {
+    const c = { ...j } as any;
+    if (c.pa) [c.a, c.pa] = move(c.a, c.pa);
+    if (c.pb && c.b !== 'ground') [c.b, c.pb] = move(c.b, c.pb);
+    return c;
+  });
+  const axle = mech.joints[mech.axle] as Extract<Joint, { kind: 'pin' }>;
+  mech.joints.push({ ...axle, a: S, pa: [-xs, 0] });
+  const M = mech.bodies[mech.counterweight!].mass, k = (3 * EI) / (L1 + L2);
+  const tau = 9.81 * e[0] * L2 * (M + ms / 2); // couple of the hanging counterweight and the short half's weight on the short half
+  mech.flex = [{ a: S, b: 0, k, angle: -tau / k }];
+  return mech;
+}
+
 // the paper's "longest range": release at the best moment (here: the best velocity angle)
 function best(mk: () => Mechanism, from = 36, to = 43) {
   let b: { range: number; deg: number; t: number; p: number[]; peak: number; dissipated: number } | undefined;
@@ -175,8 +212,10 @@ describe('semelhança dinâmica (a premissa de escala do artigo)', () => {
 });
 
 // The authors blame the 8 % between their friction-corrected ab initio range and their measured kinematics on missing
-// degrees of freedom. Two candidates this model can test, and cannot confirm: the beam's inertia is known to ±0.15 kg·m²,
-// and a flexible trestle (their own model: "very little influence on range").
+// degrees of freedom. Three candidates this model can test, and cannot confirm: the beam's inertia is known to ±0.15 kg·m²,
+// a flexible trestle (their own model: "very little influence on range"), and beam bending. The gap is in the engine: with
+// friction, in vacuum, the 717 g stone leaves at 19.7 m/s against the 18.6 m/s they measured (table 2). Unmeasured and not
+// modelled: the pouch and cords riding with the stone; 60–110 g of them would close the gap for both stones.
 describe('Horsdal et al.: o que não explica a diferença contra o campo', () => {
   it('a incerteza de ±0,15 kg·m² na inércia da viga move o alcance menos de 3 %', () => {
     const r = (ib: number) => best(() => horsdal(0.717, 0.87, true, false, ib)).range;
@@ -188,5 +227,26 @@ describe('Horsdal et al.: o que não explica a diferença contra o campo', () =>
     const rigid = best(() => horsdal(0.717)).range;
     const soft = best(() => horsdal(0.717, 0.87, true, false, IB, { mass: 100, k: 5e4 })).range;
     expect(Math.abs(soft / rigid - 1)).toBeLessThan(0.005);
+  });
+
+  // EI from the paper's own static deflection at the pivot (table 4: uP = 0.6 mm with Fs = M·g·(1 + L2/L1)):
+  // ≈ 1.8e4 N·m², a 7.5 cm round beam with E ≈ 12 GPa (wood). Without friction or air, so only the bending differs.
+  it('a flexão da viga (rigidez da tabela 4 do artigo) muda o alcance menos de 0,5 %; nem 10× mais mole passa de 1 %', () => {
+    const Fs = 53.9 * 9.81 * (1 + L2 / L1), EI = (Fs * L1 * L1 * L2 * L2) / (3 * (L1 + L2) * 0.0006);
+    const rigid = best(() => horsdal(0.717, 0.87, false)).range;
+    const shot = (ei: number) => {
+      const b = best(() => flexible(horsdal(0.717, 0.87, false), ei));
+      const m = flexible(horsdal(0.717, 0.87, false), ei);
+      m.releaseAngle = (b.deg * Math.PI) / 180;
+      const r = simulate(m, { afterRelease: 0, frameEvery: 1 });
+      const S = m.bodies.length - 1, bend = Math.max(...r.frames.map((f) => Math.abs(f.q[3 * S + 2] - f.q[2])));
+      return { range: b.range, bend, dissipated: r.dissipated };
+    };
+    const real = shot(EI), soft = shot(EI / 10);
+    expect(Math.abs(real.range / rigid - 1)).toBeLessThan(0.005);
+    expect(Math.abs(soft.range / rigid - 1)).toBeLessThan(0.01);
+    expect(real.bend * L1).toBeGreaterThan(0.001); // it does bend: millimeters at the long end, as the paper says
+    expect(real.bend * L1).toBeLessThan(0.01);
+    expect(real.dissipated / DU).toBeLessThan(0.01); // the spring gives its energy back
   });
 });

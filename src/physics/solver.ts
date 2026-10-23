@@ -153,6 +153,11 @@ export function accelerations(m: Mechanism, s: State, active: boolean[], prev: n
     F[3 * sp.body + 1] += fy;
     F[3 * sp.body + 2] += P.r[0] * fy - P.r[1] * fx;
   }
+  for (const fl of m.flex ?? []) {
+    const t = fl.k * (s.q[3 * fl.a + 2] - s.q[3 * fl.b + 2] - fl.angle);
+    F[3 * fl.a + 2] -= t;
+    F[3 * fl.b + 2] += t;
+  }
 
   const rows: Row[] = [];
   const owner: number[] = [];
@@ -324,7 +329,7 @@ const springPE = (m: Mechanism, s: State) =>
     const P = point(s, sp.body, sp.local).p;
     const ext = Math.max(0, Math.hypot(sp.anchor[0] - P[0], sp.anchor[1] - P[1]) - sp.rest);
     return e + 0.5 * sp.k * ext * ext;
-  }, 0);
+  }, 0) + (m.flex ?? []).reduce((e, fl) => e + 0.5 * fl.k * (s.q[3 * fl.a + 2] - s.q[3 * fl.b + 2] - fl.angle) ** 2, 0);
 
 // pe = gravity + elastic (springs)
 export function energy(m: Mechanism, s: State) {

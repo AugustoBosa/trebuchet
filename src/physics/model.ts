@@ -49,6 +49,7 @@ export interface Mechanism {
   counterweight?: number; // body index; its potential-energy drop is the energy input
   pulls?: Pull[]; // crews pulling ropes straight down
   springs?: Spring[]; // stretched springs pulling body points toward ground anchors
+  flex?: Flex[]; // torsional springs between two bodies (an elastic beam cut into rigid pieces); planar solver only
 
   sling: number; // joint index released at launch
   axle: number; // joint index, reported as main structural load
@@ -72,6 +73,14 @@ export interface Spring {
   anchor: Vec;
   k: number; // N/m
   rest: number; // m
+}
+
+// Massless torsional spring: a couple −k·(θa − θb − angle) on a, the opposite on b.
+export interface Flex {
+  a: number;
+  b: number;
+  k: number; // N·m/rad
+  angle: number; // θa − θb with the spring relaxed
 }
 
 export const G = 9.81;
