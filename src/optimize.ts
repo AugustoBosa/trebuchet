@@ -13,8 +13,9 @@ export const FAST_DT = 2e-3; // ≤0.012% off the 1e-4 reference (release is int
 
 // 3D conditions of the shot; pinOffset can also be an optimization variable (then it rides in the params)
 export interface Env3 { windZ: number; pinOffset: number; aimDeg: number }
-// target: m to hit (objective 'target'); axleCap: N the axle may carry at most (the range × axle-load front); both ride in the params like pinOffset
-export type OptParams = Params & { pinOffset?: number; aimDeg?: number; target?: number; axleCap?: number };
+// target: m to hit (objective 'target'); axleCap / slingCap: N the axle / the sling (= the force on the projectile) may carry at most
+// (the range × axle-load front; a fragile projectile); all ride in the params like pinOffset
+export type OptParams = Params & { pinOffset?: number; aimDeg?: number; target?: number; axleCap?: number; slingCap?: number };
 const RANGES3 = { pinOffset: [-0.5, 0.5], aimDeg: [-15, 15] } as const; // same limits as the 3D fields (±50 cm, ±15°)
 // robust range: release ±2° (the pin's timing scatter) and a ±3 m/s tail/head gust around the nominal shot
 const SCENARIOS = [{ dDeg: 0, windX: 0 }, { dDeg: 2, windX: 0 }, { dDeg: -2, windX: 0 }, { dDeg: 0, windX: 3 }, { dDeg: 0, windX: -3 }];
@@ -23,11 +24,11 @@ const SCENARIOS = [{ dDeg: 0, windX: 0 }, { dDeg: 2, windX: 0 }, { dDeg: -2, win
 export interface Struct { spec: Record<string, PartSpec>; mode: Mode; fsMin: number }
 const MARGIN = 1.01; // the search runs at FAST_DT; the full-accuracy shot's peaks differ by a fraction of that
 
-// planar score of a shot; a design whose axle would carry more than axleCap is scored down like a broken part
+// planar score of a shot; a design whose axle or sling would carry more than its cap is scored down like a broken part
 const planarScore = (r: Result, m: Mechanism, objective: Objective, p: OptParams) => {
   const v = objective === 'range' ? r.range : objective === 'efficiency' ? r.efficiency : 1 / (1 + Math.abs(r.range - (p.target ?? 0)));
-  const f = r.peakForce[m.axle];
-  return p.axleCap && f > p.axleCap ? v * (f / p.axleCap) ** -8 : v;
+  const over = Math.max(p.axleCap ? r.peakForce[m.axle] / p.axleCap : 0, p.slingCap ? r.peakForce[m.sling] / p.slingCap : 0);
+  return over > 1 ? v * over ** -8 : v;
 };
 
 // peak reaction at the axle (N) of a quick planar shot; 0 when it doesn't shoot
@@ -130,6 +131,23 @@ export function minCounterweight(kind: Kind, p: OptParams, target: number): numb
     else a = mid;
   }
   return b;
+}
+
+// The release angle (°) that maximizes the score with everything else fixed: a coarse scan, then golden-section around the best
+// point. ponytail: assumes one hump per 10° bracket (true for every preset's release curve); value = the score there
+export function bestRelease(kind: Kind, p: OptParams, objective: Objective, env3?: Env3) {
+  const f = (d: number) => evaluate(kind, { ...p, releaseDeg: d }, objective, env3);
+  const degs = Array.from({ length: 12 }, (_, i) => 15 + 5 * i), vals = degs.map(f);
+  const k = vals.indexOf(Math.max(...vals));
+  let a = degs[Math.max(0, k - 1)], b = degs[Math.min(degs.length - 1, k + 1)];
+  const g = (Math.sqrt(5) - 1) / 2;
+  let c = b - g * (b - a), d = a + g * (b - a), fc = f(c), fd = f(d);
+  for (let i = 0; i < 10; i++) {
+    if (fc > fd) ((b = d), (d = c), (fd = fc), (c = b - g * (b - a)), (fc = f(c)));
+    else ((a = c), (c = d), (fc = fd), (d = a + g * (b - a)), (fd = f(d)));
+  }
+  const deg = (a + b) / 2, value = f(deg);
+  return value >= vals[k] ? { deg, value } : { deg: degs[k], value: vals[k] };
 }
 
 export const shotsPerEval = (o: Objective) => (o === 'robust' ? SCENARIOS.length : 1);

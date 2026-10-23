@@ -14,6 +14,13 @@ Referência: Horsdal, Johnsen e Rasmussen (Aarhus), arXiv:2502.19442. Máquina p
 - **No ar e com atrito:** 38,4 m e 29,3 m, logo abaixo do ab initio sem atrito deles (39,5 e 30,6 m). Contra os tiros de campo (34,4 ± 1,5 m e 24,9 ± 1,5 m) o modelo fica 13 % e 18 % acima. É o limite do corpo rígido que o próprio artigo encontra (~4σ acima do campo; atribui o resto a flexão do cavalete e da viga, graus de liberdade ausentes). Não foi ajustado nada para fechar essa diferença.
 - **Funda de 0,93 m contra 0,87 m:** +4 % no modelo, +9 ± 6 % no campo.
 
+### Melhorias menores (mesmo dia)
+
+- **What If (curva 1D):** caixa na varredura que desenha, junto com o design como está, o melhor caso com o ângulo de soltura reotimizado em cada ponto (`bestRelease`: varredura grossa + seção áurea). Mostra quanto do efeito de um parâmetro é só o ângulo desajustado. Verificado no navegador (duas curvas desenhadas).
+- **Teto de força na funda** (kN, opcional): a tensão da funda é a força que o projétil sofre, e o otimizador de alcance e eficiência passa a respeitá-la (`OptParams.slingCap`, mesma penalidade do teto do eixo). No navegador, teto de 5 kN: o ótimo caiu de 489 m para 267 m e o design aplicado mostra 5,03 kN. Só no motor plano. A coluna "atual" mostra a pontuação com a penalidade, não o alcance real, como já acontece com o teto estrutural. (O "pico de força no projétil" do jstreb já existia aqui como "Pico de tração na funda".)
+- **Link compartilhado:** abrir um link que difere do design salvo pergunta antes de substituí-lo; link longo (> 8 kB, esboço livre grande) avisa no botão; o erro de link quebrado agora sobrevive ao primeiro disparo (verificado).
+- **Não feito:** fronteira em 3D (o motor 3D não devolve o pico do eixo) e contrapeso mínimo variando também ângulo e funda: para isso já existe o objetivo "Distância-alvo".
+
 ### Segunda rodada de validação com Horsdal (mesmo dia)
 
 - **As três máquinas otimizadas da tabela 4** (viga uniforme, calculadas ab initio pelo autor): alcance 36,9 / 50,2 / 50,4 m contra 36,6 / 50 / 50, energia no alvo 142 / 25 / 352 J contra 141 / 25 / 350, eficiência 92 / 93 / 92 % contra 91 / 93 / 91.

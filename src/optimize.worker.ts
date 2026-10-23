@@ -1,10 +1,10 @@
 // Runs optimizations and sweeps off the UI thread. Cancel = terminate the worker.
-import { evaluate, linspace, nelderMead, paramMapper, structU, sweepSpan, withSectionMass, type Env3, type Objective, type OptParams, type OptVar, type Struct } from './optimize';
+import { bestRelease, evaluate, linspace, nelderMead, paramMapper, structU, sweepSpan, withSectionMass, type Env3, type Objective, type OptParams, type OptVar, type Struct } from './optimize';
 import type { Kind, Params } from './presets';
 
 export type Request =
   | { type: 'optimize'; kind: Kind; params: OptParams; vars: OptVar[]; armTotal?: number; objective: Objective; maxEvals?: number; env3?: Env3; struct?: Struct }
-  | { type: 'sweep'; kind: Kind; params: OptParams; x: keyof Params; y?: keyof Params; objective: Objective; env3?: Env3 }
+  | { type: 'sweep'; kind: Kind; params: OptParams; x: keyof Params; y?: keyof Params; objective: Objective; env3?: Env3; whatif?: boolean } // whatif (1D): a second curve with the release angle re-optimized at each point
   | { type: 'screen'; kind: Kind; params: OptParams; structs: Struct[] }; // worst utilization of each variant, one quick shot each
 
 export type Reply =
@@ -31,6 +31,16 @@ onmessage = (e: MessageEvent<Request>) => {
     post({ type: 'screened', u: q.structs.map((st) => structU(q.kind, q.params, st)) });
   } else {
     const xs = linspace(...sweepSpan(q.x, q.params[q.x]), q.y ? 16 : 40);
+    if (q.whatif && !q.y) {
+      const asIs: number[] = [], best: number[] = [];
+      xs.forEach((xv, i) => {
+        const p = { ...q.params, [q.x]: xv };
+        asIs.push(evaluate(q.kind, p, q.objective, q.env3));
+        best.push(bestRelease(q.kind, p, q.objective, q.env3).value);
+        post({ type: 'progress', evals: i + 1, done: i + 1, total: xs.length });
+      });
+      return post({ type: 'swept', xs, z: [asIs, best] });
+    }
     const ys = q.y ? linspace(...sweepSpan(q.y, q.params[q.y]), 12) : undefined;
     const z: number[][] = [];
     const rows = ys ?? [undefined];

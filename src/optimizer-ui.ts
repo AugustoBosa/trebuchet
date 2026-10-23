@@ -120,11 +120,13 @@ export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p:
       vars.push('armSplit');
     }
     if (!vars.length) return void status('Marque ao menos uma variável.');
+    const slingCap = Number($<HTMLInputElement>('opt-slingcap').value) * 1000; // kN → N; empty / 0 = no cap
+    if (slingCap > 0 && env3) return void status('O teto de força na funda usa o motor plano: desligue a "Vista 3D".');
     const aim = !forceRange && objective() === 'target';
     const target = aim ? targetM() : undefined;
     if (aim && !target) return void status('Digite a distância-alvo, em metros.');
     $('opt-result').innerHTML = '';
-    const base: OptParams = { ...o.params, ...(env3 ? { pinOffset: env3.pinOffset, aimDeg: env3.aimDeg } : {}), ...(target ? { target } : {}) };
+    const base: OptParams = { ...o.params, ...(env3 ? { pinOffset: env3.pinOffset, aimDeg: env3.aimDeg } : {}), ...(target ? { target } : {}), ...(slingCap > 0 ? { slingCap } : {}) };
     return { armTotal: arm ? armTotal : undefined, env3, vars, base, map: paramMapper(base, vars, arm ? armTotal : undefined), kind: o.kind(), obj: objective() };
   }
 
@@ -320,9 +322,11 @@ export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p:
     if (needs3d()) return;
     const title = OBJECTIVE_NAMES[objective()];
     const env3 = o.env3();
-    start({ type: 'sweep', kind: o.kind(), params: { ...o.params, ...(objective() === 'target' ? { target: targetM() } : {}) }, x, y, objective: objective(), ...(env3 ? { env3 } : {}) }, (r) => {
+    const whatif = $<HTMLInputElement>('sw-whatif').checked && !y && x !== 'releaseDeg';
+    if ($<HTMLInputElement>('sw-whatif').checked && !whatif) status('A comparação com o melhor caso vale só para a curva 1D de um parâmetro que não seja o ângulo de soltura.');
+    start({ type: 'sweep', kind: o.kind(), params: { ...o.params, ...(objective() === 'target' ? { target: targetM() } : {}) }, x, y, objective: objective(), ...(env3 ? { env3 } : {}), ...(whatif ? { whatif } : {}) }, (r) => {
       if (r.type !== 'swept') return;
-      status(`Varredura concluída: ${r.z.flat().length * shotsPerEval(objective())} simulações. Clique no gráfico para aplicar um ponto.`);
+      status((whatif ? 'Varredura concluída: o design como está contra o melhor ângulo de soltura em cada ponto.' : `Varredura concluída: ${r.z.flat().length * shotsPerEval(objective())} simulações.`) + ' Clique no gráfico para aplicar um ponto.');
       sweepCanvas.hidden = false;
       const z = r.z.map((row) => row.map(shown));
       if (r.ys && y) {
@@ -337,7 +341,7 @@ export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p:
       } else {
         const [, name, xUnit = ''] = LABELS[x].match(/^(.*?)(?: \(([^)]+)\))?$/)!; // "Funda (m)" → name, unit
         const spec: ChartSpec = { title: `${title} × ${name.toLowerCase()}`, unit: unit(), t: r.xs, xUnit, marker: o.params[x], markerLabel: 'atual',
-          series: [{ label: title, color: css('--series-1'), values: z[0] }] };
+          series: whatif && z[1] ? [{ label: 'como está', color: css('--series-1'), values: z[0] }, { label: 'melhor caso (ângulo reotimizado)', color: css('--series-2'), values: z[1] }] : [{ label: title, color: css('--series-1'), values: z[0] }] };
         plot = {
           draw: (cx) => drawChart(sweepCanvas, spec, cx === undefined ? undefined : timeAt(sweepCanvas, spec, cx)),
           click: (cx) => o.apply({ [x]: +timeAt(sweepCanvas, spec, cx).toPrecision(4) }),

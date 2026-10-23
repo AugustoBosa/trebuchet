@@ -13,7 +13,7 @@ npm run build    # tsc + vite build
 
 - **14 tipos:** contrapeso fixo, articulado, floating arm, tração humana, whipper, walking arm, MURLIN, roda, F2K, FET, King Arthur, FAKA, mola e Fiffer. Mais um editor livre (corpos, juntas, cames, molas, roletes, espinhos).
 - **Solver próprio** com restrições, contatos unilaterais (cordas que afrouxam, pés que descolam, rodas que pousam), atrito de mancal, arrasto e vento. A versão 3D dá dispersão (elipses de 1σ/2σ), desvio lateral e exportação glb/stl.
-- **Otimizador** (Nelder–Mead de 8 partidas em paralelo): alcance, eficiência, distância-alvo (e contrapeso mínimo para ela), desvio lateral e alcance robusto; braço de comprimento total fixo; varredura de material × bitola; fronteira alcance × força no eixo.
+- **Otimizador** (Nelder–Mead de 8 partidas em paralelo): alcance, eficiência, distância-alvo (e contrapeso mínimo para ela), desvio lateral e alcance robusto; braço de comprimento total fixo; varredura de material × bitola; fronteira alcance × força no eixo; teto de força na funda (projétil frágil); "What If" que compara a varredura com o melhor ângulo de soltura.
 - **Estrutura:** as peças quebram durante o tiro (ruptura ou critério de projeto NBR 8800 / madeira), com 27 madeiras do IPT, aços, alumínios e cordas.
 - **Compartilhar:** "Copiar link" põe o design inteiro no fragmento da URL (nada vai para servidor). Também há JSON e CSV.
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { armSplitRange, axlePeak, distinctOptima, evaluate, latinHypercube, minCounterweight, nelderMead, paramMapper, seeded, shownValue } from '../src/optimize';
+import { armSplitRange, axlePeak, bestRelease, distinctOptima, evaluate, latinHypercube, minCounterweight, nelderMead, paramMapper, seeded, shownValue } from '../src/optimize';
 import { simulate } from '../src/physics/solver';
 import { build, defaults } from '../src/presets';
 
@@ -115,5 +115,31 @@ describe('contrapeso mínimo para o alvo', () => {
     expect(evaluate('hinged', { ...base, cwMass: cw }, 'range')).toBeGreaterThanOrEqual(target);
     expect(evaluate('hinged', { ...base, cwMass: cw * 0.98 }, 'range')).toBeLessThan(target);
     expect(minCounterweight('hinged', base, 1e6)).toBeUndefined();
+  });
+});
+
+describe('melhor caso (What If) e teto de força na funda', () => {
+  it('o ângulo reotimizado nunca rende menos que o atual, nem menos que qualquer ponto da grade', () => {
+    const p = { ...defaults, cwMass: 600 };
+    const b = bestRelease('hinged', p, 'range');
+    expect(b.value).toBeGreaterThanOrEqual(evaluate('hinged', p, 'range'));
+    for (const d of [25, 30, 35, 40, 45, 50]) expect(b.value).toBeGreaterThanOrEqual(evaluate('hinged', { ...p, releaseDeg: d }, 'range') - 1e-6);
+    expect(b.deg).toBeGreaterThan(20);
+    expect(b.deg).toBeLessThan(60);
+  });
+
+  it('com teto na funda, o ótimo respeita o teto e custa alcance', () => {
+    const vars = ['cwMass', 'slingLength', 'releaseDeg'] as const;
+    const peak = (p: typeof defaults) => { const m = build('hinged', p); return simulate(m, { afterRelease: 0, dt: 2e-3 }).peakForce[m.sling]; };
+    const map0 = paramMapper(defaults, [...vars]);
+    const free = nelderMead((u) => -evaluate('hinged', map0.toParams(u), 'range'), map0.toUnit(defaults), { maxEvals: 120 });
+    const best = map0.toParams(free.x);
+    const cap = 0.6 * peak(best);
+    const capped = { ...best, slingCap: cap };
+    const map = paramMapper(capped, [...vars]);
+    const res = nelderMead((u) => -evaluate('hinged', map.toParams(u), 'range'), map.toUnit(capped), { maxEvals: 120 });
+    const p = map.toParams(res.x);
+    expect(peak(p)).toBeLessThan(cap * 1.05);
+    expect(evaluate('hinged', { ...p, slingCap: undefined }, 'range')).toBeLessThan(-free.fx);
   });
 });

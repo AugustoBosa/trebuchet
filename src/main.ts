@@ -787,7 +787,7 @@ $('share').addEventListener('click', async (e) => {
   const btn = e.currentTarget as HTMLButtonElement;
   try {
     await navigator.clipboard.writeText(url);
-    btn.textContent = 'Link copiado';
+    btn.textContent = url.length > 8000 ? `Link copiado, mas longo (${Math.round(url.length / 1000)} kB): use Exportar JSON se não abrir` : 'Link copiado'; // a big free sketch
     setTimeout(() => (btn.textContent = 'Copiar link'), 2000);
   } catch {
     prompt('Copie o link do design:', url); // no clipboard access (insecure page, blocked)
@@ -797,11 +797,14 @@ $('share').addEventListener('click', async (e) => {
 const saved = loadCurrent();
 const want = new URLSearchParams(location.search).get('kind') as Kind | null; // deep link from the article: ./?kind=walking
 let linked: Design | undefined; // a design shared by link: #d=…
+let linkErr = '';
 if (location.hash.startsWith('#d=')) {
   try {
     linked = decodeDesign(location.hash.slice(3));
+    // opening it replaces the browser's current design: ask first when that one is different
+    if (saved && JSON.stringify(saved) !== JSON.stringify(linked) && !confirm(`Este link traz o design "${linked.name}". Abrir substitui o design atual do navegador ("${saved.name}"). Continuar?`)) linked = undefined;
   } catch {
-    $('err').textContent = 'O link do design está quebrado ou incompleto.';
+    linkErr = 'O link do design está quebrado ou incompleto.';
   }
   history.replaceState(null, '', location.pathname + location.search); // the fragment goes stale at the first edit
 }
@@ -813,4 +816,5 @@ else if (want && want in KINDS) {
   run();
 } else if (saved) load(saved);
 else (buildForm(), run());
+if (linkErr) $('err').textContent = linkErr; // after the first run, which clears it
 refreshSaved();

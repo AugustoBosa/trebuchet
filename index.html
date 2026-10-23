@@ -165,6 +165,7 @@
           <legend>Otimizar</legend>
           <div class="row"><button type="button" class="ghost" id="opt-help-btn" aria-haspopup="dialog">ⓘ Como usar</button></div>
           <label>Objetivo<select id="objective"><option value="range">Alcance</option><option value="efficiency">Eficiência</option><option value="target">Distância-alvo</option><option value="lateral">Desvio lateral mínimo (3D)</option><option value="robust">Alcance robusto (3D)</option></select></label>
+          <label>Teto de força na funda, kN (opcional)<input type="number" id="opt-slingcap" min="0" step="0.5" placeholder="sem teto" title="A funda carrega a força que acelera o projétil: com um teto, o otimizador procura o maior alcance que não passa disso (projétil frágil)"></label>
           <label id="opt-target-box">Distância-alvo (m), para o objetivo de mesmo nome e para o contrapeso mínimo<input type="number" id="opt-target" value="100" min="1" step="1"></label>
           <p class="muted">Variáveis livres para o otimizador:</p>
           <div id="opt-vars"></div>
@@ -189,6 +190,7 @@
           <h2>Varredura</h2>
           <label>Eixo X<select id="sw-x"></select></label>
           <label>Eixo Y<select id="sw-y"></select></label>
+          <label class="chk"><input type="checkbox" id="sw-whatif"> Comparar com o melhor caso (curva 1D): reotimiza o ângulo de soltura em cada ponto</label>
           <div class="row"><button type="button" class="ghost" id="sw-run">Varrer</button></div>
         </fieldset>
         <dialog id="opt-help" aria-labelledby="opt-help-title">
@@ -217,6 +219,7 @@
               <li><b>Aplique.</b> O botão <i>Aplicar</i> de uma linha copia os valores para os controles e dispara o tiro completo, com passo de integração fino, então o resultado pode diferir por décimos de percentual do valor da busca.</li>
             </ol>
             <p>O botão <i>Contrapeso mínimo para o alvo</i> responde "qual o menor contrapeso que chega a X m" com todo o resto do design como está (ângulo, funda, braço): varre a faixa do controle e refina o primeiro valor que alcança o alvo. Só nos tipos com contrapeso; para ajustar também o ângulo e a funda, use o objetivo <i>Distância-alvo</i>.</p>
+            <p>O <i>Teto de força na funda</i> limita a força que o projétil sofre (a tensão da funda): com ele, <i>Alcance</i> e <i>Eficiência</i> procuram o melhor design que não passa do teto, útil para projéteis frágeis. Só no motor plano.</p>
             <h3>Fronteira alcance × força no eixo</h3>
             <p>O botão <i>Fronteira alcance × força no eixo</i> otimiza o alcance e mede a força de pico no eixo; depois repete a busca com tetos de 85%, 70%, 55%, 40% e 30% dessa força. A tabela mostra só os designs que ninguém bate nos dois critérios: cada linha rende o maior alcance que achamos para aquela força, e dá o preço, em metros, de poupar o eixo. Usa as mesmas variáveis marcadas (e o braço total fixo, se marcado); só no motor plano.</p>
             <h3>Como interpretar o resultado</h3>
