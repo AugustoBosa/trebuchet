@@ -200,18 +200,20 @@ export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p:
     const startsU = [map.toUnit(base), ...latinHypercube(STARTS - 1, vars.length)];
     const reqs: Request[] = startsU.map((u) => ({ type: 'optimize', kind, params: map.toParams(u), vars, objective: obj, maxEvals: 30 + 25 * vars.length, ...(arm ? { armTotal } : {}), ...(env3 ? { env3 } : {}), ...(st ? { struct: st } : {}) }));
     const found: { u: number[]; value: number; params: OptParams; fs?: number }[] = [];
-    let current = 0;
     let evals = 0;
     status(`Otimizando a partir de ${STARTS} pontos em paralelo…`);
     runPool(reqs, {
-      each: (r, i) => {
+      each: (r) => {
         if (r.type !== 'optimized') return;
-        if (i === 0) current = arm ? evaluate(kind, base, obj, env3, st) : r.start; // start 0 is the current design (its arms may be rescaled to the new total)
         evals += r.evals * shotsPerEval(obj);
         found.push({ u: map.toUnit(r.params), value: r.value, params: r.params, fs: r.fs });
         status(`Otimizando… ${found.length}/${STARTS} partidas concluídas · ${evals} simulações`);
       },
-      done: () => showOptima(vars, distinctOptima(found), current, evals, base, arm ? armTotal : undefined, st),
+      done: () => {
+        // scores carry the sling cap's / the parts' penalty: the table shows each design's true value, flagged when it breaks them
+        const real = (p: OptParams) => (base.slingCap || st ? evaluate(kind, st ? withSectionMass({ ...p, slingCap: undefined }, st.spec) : { ...p, slingCap: undefined }, obj, env3) : undefined);
+        showOptima(vars, distinctOptima(found), evaluate(kind, base, obj, env3, st), evals, base, arm ? armTotal : undefined, st, real);
+      },
     });
   });
 
@@ -281,7 +283,7 @@ export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p:
     });
   }
 
-  function showOptima(optVars: OptVar[], all: ReturnType<typeof distinctOptima<{ u: number[]; value: number; params: OptParams; fs?: number }>>, current: number, evals: number, base: OptParams, armTotal?: number, st?: Struct) {
+  function showOptima(optVars: OptVar[], all: ReturnType<typeof distinctOptima<{ u: number[]; value: number; params: OptParams; fs?: number }>>, current: number, evals: number, base: OptParams, armTotal?: number, st?: Struct, real?: (p: OptParams) => number | undefined) {
     const vars = optVars.flatMap((v): OptKey[] => (v === 'armSplit' ? ['longArm', 'shortArm'] : [v])); // table columns
     const name = OBJECTIVE_NAMES[objective()];
     const sum = +(o.params.longArm + o.params.shortArm).toFixed(3);
@@ -290,17 +292,21 @@ export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p:
     // optima far below the best are dead ends (often stuck on a slider limit): count them, don't list them
     const optima = all.filter((op) => op.value >= 0.5 * all[0].value);
     const stuck = STARTS - optima.reduce((n, op) => n + op.count, 0);
-    const gain = (v: number) => (current > 0 && objective() !== 'lateral' && objective() !== 'target' ? ` <span class="muted">(${v >= current ? '+' : ''}${((100 * (v - current)) / current).toFixed(1)}%)</span>` : '');
+    // true value of a design (score without the caps' penalty) and whether the penalty bit
+    const truth = (score: number, p: OptParams) => { const v = real?.(p) ?? score; return { v, over: score < v * (1 - 1e-6) }; };
+    const cur = truth(current, base);
+    const flag = (over: boolean) => (over ? ' <span class="muted" title="Passa do teto de força na funda ou do FS mínimo: o valor é o do tiro sem o limite.">(fora dos limites)</span>' : '');
+    const gain = (v: number) => (cur.v > 0 && objective() !== 'lateral' && objective() !== 'target' ? ` <span class="muted">(${v >= cur.v ? '+' : ''}${((100 * (v - cur.v)) / cur.v).toFixed(1)}%)</span>` : '');
     const stuckNote = stuck ? ` ${stuck} partida(s) terminaram em designs que falham ou rendem menos da metade, e foram omitidas.` : '';
     status((optima.length === 1
       ? `${STARTS} partidas, ${evals} simulações: todas as que deram certo chegaram ao mesmo ótimo, provavelmente o global nessa faixa.`
       : `${STARTS} partidas, ${evals} simulações: ${optima.length} ótimos locais distintos. Compare as soluções.`) + stuckNote);
     $('opt-result').innerHTML = `<table>
       <tr><th></th>${vars.map((k) => `<th>${label(k)}</th>`).join('')}<th>${name}</th>${st ? '<th>FS</th>' : ''}<th>achado</th><th></th></tr>
-      <tr><td>atual</td>${vars.map((k) => `<td>${+(base[k] ?? 0).toPrecision(4)}</td>`).join('')}<td>${fmt(current)}</td>${st ? '<td></td>' : ''}<td></td><td></td></tr>
-      ${optima.map((op, i) => `<tr><td>${i === 0 ? '<b>melhor</b>' : `#${i + 1}`}</td>
+      <tr><td>atual</td>${vars.map((k) => `<td>${+(base[k] ?? 0).toPrecision(4)}</td>`).join('')}<td>${fmt(cur.v)}${flag(cur.over)}</td>${st ? '<td></td>' : ''}<td></td><td></td></tr>
+      ${optima.map((op, i) => ({ op, i, t: truth(op.value, op.params) })).map(({ op, i, t }) => `<tr><td>${i === 0 ? '<b>melhor</b>' : `#${i + 1}`}</td>
         ${vars.map((k) => `<td>${+(op.params[k] ?? 0).toPrecision(4)}</td>`).join('')}
-        <td><b>${fmt(op.value)}</b>${gain(op.value)}</td>${st ? `<td${(op.fs ?? 0) < st.fsMin * 0.97 ? ' class="fail"' : ''}>${(op.fs ?? 0).toFixed(2)}</td>` : ''}<td>${op.count}×</td>
+        <td><b>${fmt(t.v)}</b>${gain(t.v)}${flag(t.over)}</td>${st ? `<td${(op.fs ?? 0) < st.fsMin * 0.97 ? ' class="fail"' : ''}>${(op.fs ?? 0).toFixed(2)}</td>` : ''}<td>${op.count}×</td>
         <td><button type="button" class="ghost" data-opt="${i}">Aplicar</button></td></tr>`).join('')}
     </table>`;
     $('opt-result').querySelectorAll<HTMLButtonElement>('[data-opt]').forEach((b) =>
