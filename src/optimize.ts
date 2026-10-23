@@ -114,6 +114,24 @@ function score(kind: Kind, p: OptParams, objective: Objective, env3?: Env3): num
   }
 }
 
+// Smallest counterweight (kg) whose shot reaches `target` m with everything else as in p: the first crossing on a geometric
+// scan of the slider's range, then bisected. Undefined when no counterweight reaches it. ponytail: first crossing, not a proof
+// of monotony (a counterweight too big for the frame fails and scores 0, which the scan simply steps over)
+export function minCounterweight(kind: Kind, p: OptParams, target: number): number | undefined {
+  const [lo, hi] = RANGES.cwMass;
+  const reach = (cw: number) => evaluate(kind, { ...p, cwMass: cw }, 'range') >= target;
+  const grid = Array.from({ length: 41 }, (_, i) => lo * (hi / lo) ** (i / 40));
+  const k = grid.findIndex(reach);
+  if (k <= 0) return k < 0 ? undefined : grid[0];
+  let [a, b] = [grid[k - 1], grid[k]];
+  for (let i = 0; i < 20; i++) {
+    const mid = Math.sqrt(a * b);
+    if (reach(mid)) b = mid;
+    else a = mid;
+  }
+  return b;
+}
+
 export const shotsPerEval = (o: Objective) => (o === 'robust' ? SCENARIOS.length : 1);
 
 // score → what the user reads: m, %, or the error (lateral drift, miss of the target) in m

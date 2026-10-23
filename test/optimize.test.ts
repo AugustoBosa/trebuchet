@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { armSplitRange, axlePeak, distinctOptima, evaluate, latinHypercube, nelderMead, paramMapper, seeded, shownValue } from '../src/optimize';
+import { armSplitRange, axlePeak, distinctOptima, evaluate, latinHypercube, minCounterweight, nelderMead, paramMapper, seeded, shownValue } from '../src/optimize';
 import { simulate } from '../src/physics/solver';
 import { build, defaults } from '../src/presets';
 
@@ -102,5 +102,18 @@ describe('distância-alvo e teto de força no eixo', () => {
     const p = map.toParams(res.x);
     expect(axlePeak('hinged', p)).toBeLessThan(cap * 1.05);
     expect(evaluate('hinged', { ...p, axleCap: undefined }, 'range')).toBeLessThan(-free.fx);
+  });
+});
+
+describe('contrapeso mínimo para o alvo', () => {
+  it('acha o menor contrapeso que chega ao alvo (e o alvo impossível devolve nada)', () => {
+    const base = { ...defaults, cwMass: 600 };
+    const target = evaluate('hinged', base, 'range');
+    const cw = minCounterweight('hinged', base, target)!;
+    expect(cw).toBeLessThanOrEqual(600 * 1.001);
+    expect(cw).toBeGreaterThan(600 * 0.9); // range grows with the counterweight: nothing much lighter reaches it
+    expect(evaluate('hinged', { ...base, cwMass: cw }, 'range')).toBeGreaterThanOrEqual(target);
+    expect(evaluate('hinged', { ...base, cwMass: cw * 0.98 }, 'range')).toBeLessThan(target);
+    expect(minCounterweight('hinged', base, 1e6)).toBeUndefined();
   });
 });

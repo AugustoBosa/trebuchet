@@ -165,7 +165,7 @@
           <legend>Otimizar</legend>
           <div class="row"><button type="button" class="ghost" id="opt-help-btn" aria-haspopup="dialog">ⓘ Como usar</button></div>
           <label>Objetivo<select id="objective"><option value="range">Alcance</option><option value="efficiency">Eficiência</option><option value="target">Distância-alvo</option><option value="lateral">Desvio lateral mínimo (3D)</option><option value="robust">Alcance robusto (3D)</option></select></label>
-          <label id="opt-target-box" hidden>Distância-alvo (m)<input type="number" id="opt-target" value="100" min="1" step="1"></label>
+          <label id="opt-target-box">Distância-alvo (m), para o objetivo de mesmo nome e para o contrapeso mínimo<input type="number" id="opt-target" value="100" min="1" step="1"></label>
           <p class="muted">Variáveis livres para o otimizador:</p>
           <div id="opt-vars"></div>
           <div id="opt-arm-box">
@@ -183,7 +183,7 @@
             <label>Bitolas otimizadas por material<input type="number" id="opt-keep" value="2" min="1" max="6" step="1"></label>
             <p class="muted">Com uma peça disponível de comprimento fixo, marque também "Distribuir o braço" acima e digite o comprimento dela. Na varredura, cada material × bitola ganha uma otimização própria, e a massa do braço passa a ser ρ·A·L.</p>
           </div>
-          <div class="row"><button type="button" id="opt-run">Otimizar</button><button type="button" class="ghost" id="opt-pareto" title="Otimiza o alcance sob tetos cada vez menores para a força de pico no eixo e mostra o preço do alcance extra">Fronteira alcance × força no eixo</button><button type="button" class="ghost" id="opt-stop" hidden>Parar</button></div>
+          <div class="row"><button type="button" id="opt-run">Otimizar</button><button type="button" class="ghost" id="opt-mincw" title="Com o resto do design como está, acha o menor contrapeso cujo tiro chega à distância-alvo">Contrapeso mínimo para o alvo</button><button type="button" class="ghost" id="opt-pareto" title="Otimiza o alcance sob tetos cada vez menores para a força de pico no eixo e mostra o preço do alcance extra">Fronteira alcance × força no eixo</button><button type="button" class="ghost" id="opt-stop" hidden>Parar</button></div>
           <p id="opt-status" class="muted" role="status" aria-live="polite"></p>
           <div id="opt-result"></div>
           <h2>Varredura</h2>
@@ -216,6 +216,7 @@
               <li><b>Leia a tabela.</b> A linha <i>atual</i> é o seu design. <i>melhor</i>, #2, #3… são ótimos locais diferentes, do melhor para o pior. A coluna <i>achado</i> diz em quantas partidas a busca chegou àquele ponto: quanto maior, mais confiável. O percentual ao lado do resultado é o ganho sobre o design atual.</li>
               <li><b>Aplique.</b> O botão <i>Aplicar</i> de uma linha copia os valores para os controles e dispara o tiro completo, com passo de integração fino, então o resultado pode diferir por décimos de percentual do valor da busca.</li>
             </ol>
+            <p>O botão <i>Contrapeso mínimo para o alvo</i> responde "qual o menor contrapeso que chega a X m" com todo o resto do design como está (ângulo, funda, braço): varre a faixa do controle e refina o primeiro valor que alcança o alvo. Só nos tipos com contrapeso; para ajustar também o ângulo e a funda, use o objetivo <i>Distância-alvo</i>.</p>
             <h3>Fronteira alcance × força no eixo</h3>
             <p>O botão <i>Fronteira alcance × força no eixo</i> otimiza o alcance e mede a força de pico no eixo; depois repete a busca com tetos de 85%, 70%, 55%, 40% e 30% dessa força. A tabela mostra só os designs que ninguém bate nos dois critérios: cada linha rende o maior alcance que achamos para aquela força, e dá o preço, em metros, de poupar o eixo. Usa as mesmas variáveis marcadas (e o braço total fixo, se marcado); só no motor plano.</p>
             <h3>Como interpretar o resultado</h3>

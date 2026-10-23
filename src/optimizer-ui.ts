@@ -1,6 +1,6 @@
 import { css, drawChart, drawHeatmap, heatCell, timeAt, type ChartSpec, type HeatSpec } from './charts';
 import { LABELS, RANGES } from './labels';
-import { armSplitRange, axlePeak, distinctOptima, evaluate, latinHypercube, paramMapper, shotsPerEval, shownValue, withSectionMass, type Env3, type Objective, type OptKey, type OptParams, type OptVar, type Struct } from './optimize';
+import { armSplitRange, axlePeak, distinctOptima, evaluate, latinHypercube, minCounterweight, paramMapper, shotsPerEval, shownValue, withSectionMass, type Env3, type Objective, type OptKey, type OptParams, type OptVar, type Struct } from './optimize';
 import { BAR_MATS, sizesFor, type PartSpec } from './materials';
 import type { Mode } from './structure';
 import type { Reply, Request } from './optimize.worker';
@@ -105,7 +105,6 @@ export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p:
 
   // 'target': the distance to hit, in m (empty or ≤ 0 is refused)
   const targetM = () => (Number($<HTMLInputElement>('opt-target').value) > 0 ? Number($<HTMLInputElement>('opt-target').value) : undefined);
-  $('objective').addEventListener('change', () => ($('opt-target-box').hidden = objective() !== 'target'));
 
   // What the Otimizar and Fronteira buttons share: the free variables, the base design (with the target) and the mapper.
   // Undefined, with the reason in the status line, when something is off. forceRange: the front ignores the objective menu.
@@ -128,6 +127,19 @@ export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p:
     const base: OptParams = { ...o.params, ...(env3 ? { pinOffset: env3.pinOffset, aimDeg: env3.aimDeg } : {}), ...(target ? { target } : {}) };
     return { armTotal: arm ? armTotal : undefined, env3, vars, base, map: paramMapper(base, vars, arm ? armTotal : undefined), kind: o.kind(), obj: objective() };
   }
+
+  // "What counterweight reaches X m?" with the rest of the design as it is: one scan, no search
+  $('opt-mincw').addEventListener('click', () => {
+    const target = targetM();
+    if (!target) return void status('Digite a distância-alvo, em metros.');
+    if (!KINDS[o.kind()].fields.includes('cwMass')) return void status('Esse tipo não tem contrapeso para variar.');
+    const cw = minCounterweight(o.kind(), o.params, target);
+    if (cw === undefined) return void status(`Nenhum contrapeso da faixa (${RANGES.cwMass.slice(0, 2).join(' a ')} kg) chega a ${target} m com o resto do design como está. Mude o ângulo, a funda ou o braço.`);
+    const got = evaluate(o.kind(), { ...o.params, cwMass: cw }, 'range');
+    status(`Contrapeso mínimo para ${target} m: ${+cw.toPrecision(4)} kg (o tiro chega a ${got.toFixed(1)} m), com o resto do design como está.`);
+    $('opt-result').innerHTML = `<table><tr><th>Contrapeso (kg)</th><th>Alcance</th><th></th></tr><tr><td>${+cw.toPrecision(4)}</td><td><b>${got.toFixed(1)} m</b></td><td><button type="button" class="ghost" id="mincw-apply">Aplicar</button></td></tr></table>`;
+    $('mincw-apply').addEventListener('click', () => o.apply({ cwMass: +cw.toPrecision(4) }));
+  });
 
   // Range × axle load front (ε-constraint): the best range with no cap, then the best range with the axle capped at
   // 85, 70, 55, 40 and 30 % of the force that design needs. Only what nobody beats on both is listed.

@@ -13,7 +13,7 @@ npm run build    # tsc + vite build
 
 - **14 tipos:** contrapeso fixo, articulado, floating arm, tração humana, whipper, walking arm, MURLIN, roda, F2K, FET, King Arthur, FAKA, mola e Fiffer. Mais um editor livre (corpos, juntas, cames, molas, roletes, espinhos).
 - **Solver próprio** com restrições, contatos unilaterais (cordas que afrouxam, pés que descolam, rodas que pousam), atrito de mancal, arrasto e vento. A versão 3D dá dispersão (elipses de 1σ/2σ), desvio lateral e exportação glb/stl.
-- **Otimizador** (Nelder–Mead de 8 partidas em paralelo): alcance, eficiência, distância-alvo, desvio lateral e alcance robusto; braço de comprimento total fixo; varredura de material × bitola; fronteira alcance × força no eixo.
+- **Otimizador** (Nelder–Mead de 8 partidas em paralelo): alcance, eficiência, distância-alvo (e contrapeso mínimo para ela), desvio lateral e alcance robusto; braço de comprimento total fixo; varredura de material × bitola; fronteira alcance × força no eixo.
 - **Estrutura:** as peças quebram durante o tiro (ruptura ou critério de projeto NBR 8800 / madeira), com 27 madeiras do IPT, aços, alumínios e cordas.
 - **Compartilhar:** "Copiar link" põe o design inteiro no fragmento da URL (nada vai para servidor). Também há JSON e CSV.
 
@@ -24,6 +24,7 @@ A física foi conferida contra fontes externas, e os testes guardam os números 
 | Máquina | Fonte | Resultado |
 |---|---|---|
 | Articulado instrumentado (Aarhus) | Horsdal et al., arXiv:2502.19442, tabela 1 | aceleração inicial, ponto de soltura e alcance sem atrito dentro de 2%; atrito dos mancais pela eq. (8) do artigo (`test/horsdal.test.ts`) |
+| Três máquinas otimizadas (viga uniforme) | Horsdal et al., tabela 4 | alcance dentro de 1%, energia dentro de 1% e eficiência dentro de 1 ponto; escala ×2 dá alcance ×2 (`test/horsdal.test.ts`) |
 | Fiffer (First in Fright) | simulador dos próprios inventores (treygreer/treb) | soltura em 0,6780 s contra 0,6783 s (`test/fiffer.test.ts`) |
 
 Limite conhecido: com atrito e ar, o corpo rígido fica 13–18% acima dos tiros de campo de Horsdal, a mesma diferença que o artigo encontra no próprio cálculo ab initio (cavalete e viga flexíveis não entram no modelo). Nada foi ajustado para fechá-la.

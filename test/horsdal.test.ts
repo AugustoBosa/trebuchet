@@ -11,7 +11,8 @@ import { build, defaultsFor } from '../src/presets';
 // hinge friction µ = 0.35 at R = 0.25 cm (their fit, eq. 8).
 const L1 = 0.975, L2 = 0.25, LCM = 0.465, IB = 1.85, MB = 4.86, DU = 204;
 
-function horsdal(m: number, l4 = 0.87, friction = true, air = false): Mechanism {
+// ib: beam inertia about the axle; trestle: the fulcrum rides on a sliding mass held by springs (the paper's flexible-trestle idea)
+function horsdal(m: number, l4 = 0.87, friction = true, air = false, ib = IB, trestle?: { mass: number; k: number }): Mechanism {
   const p = {
     ...defaultsFor('hinged'), pivotHeight: L1 * Math.cos(0.55), longArm: L1, shortArm: L2, armMass: MB, cwMass: 53.9, hingeLength: 0.515,
     projMass: m, projRadius: Math.cbrt(m / 3000 / ((4 / 3) * Math.PI)), slingLength: l4, airDensity: air ? 1.225 : 0, dragCd: 0.5,
@@ -22,7 +23,7 @@ function horsdal(m: number, l4 = 0.87, friction = true, air = false): Mechanism 
   // the beam is not uniform: move its center of mass and fix its inertia; the rod shape only sets the extent for the ground
   // check (long end stays at L1), and the flat stack of discs hangs 0.066 m above the ground at release, so shrink its disk
   const shift = (L1 - L2) / 2 - LCM; // locals are measured from the beam's center of mass
-  Object.assign(arm, { inertia: IB - MB * LCM * LCM, shape: { kind: 'rod', length: 2 * (L1 - LCM) }, pos: [LCM * Math.cos(arm.angle), p.pivotHeight + LCM * Math.sin(arm.angle)] });
+  Object.assign(arm, { inertia: ib - MB * LCM * LCM, shape: { kind: 'rod', length: 2 * (L1 - LCM) }, pos: [LCM * Math.cos(arm.angle), p.pivotHeight + LCM * Math.sin(arm.angle)] });
   Object.assign(cw, { shape: { kind: 'disk', radius: 0.05 } });
   mech.joints = mech.joints.map((j): Joint => {
     const c = { ...j } as any;
@@ -31,6 +32,14 @@ function horsdal(m: number, l4 = 0.87, friction = true, air = false): Mechanism 
     if (c.kind === 'pin' && c.a === mech.counterweight && friction) c.friction = { mu: 0.35, radius: 0.0025 }; // hinge
     return c;
   });
+  if (trestle) {
+    const piv: [number, number] = [0, p.pivotHeight], T = mech.bodies.length;
+    mech.bodies.push({ name: 'cavalete', mass: trestle.mass, inertia: 1e3, pos: piv, angle: 0, shape: { kind: 'disk', radius: 0.01 } });
+    mech.joints = mech.joints.map((j): Joint => (j.kind === 'pin' && j.b === 'ground' && j.a === 0 ? { ...j, b: T, pb: [0, 0] } : j));
+    mech.joints.push({ kind: 'slider', a: T, pa: [0, 0], origin: piv, dir: [1, 0] });
+    // one spring each side, both unstretched at rest: whichever way it moves, the far one pulls it back
+    mech.springs = [-1, 1].map((side) => ({ body: T, local: [0, 0] as [number, number], anchor: [side, piv[1]] as [number, number], k: trestle.k, rest: 1 }));
+  }
   return mech;
 }
 
@@ -117,5 +126,67 @@ describe('Horsdal et al. (2025), trebuchet instrumentado', () => {
     const gain = best(() => horsdal(0.7, 0.93, true, true)).range / best(() => horsdal(0.7, 0.87, true, true)).range;
     expect(gain).toBeGreaterThan(1.0);
     expect(gain).toBeLessThan(1.15);
+  });
+});
+
+// The paper's optimized designs (table 4 of the 2025 paper; uniform beam, θi = 0.55 rad, vacuum, no friction): lengths in cm,
+// M in kg, m in g, mb in kg, then the range R (m), energy at target T (J) and efficiency ε (%) the authors computed ab initio.
+const TABLE4: [string, number[], number, number, number, number, number, number][] = [
+  ['mesma capacidade, 25 % maior e 50 % mais leve', [128, 36.2, 63.9, 111], 26.3, 697, 2.16, 36.6, 141, 91],
+  ['50 m com 25 J', [97.2, 21.3, 55.0, 88.0], 7.88, 95, 0.5, 50, 25, 93],
+  ['50 m com 350 J', [157, 42.7, 80.4, 137], 55.4, 1281, 4.51, 50, 350, 91],
+];
+function optimized([l1, l2, l3, l4]: number[], M: number, mg: number, mb: number, s = 1): Mechanism {
+  const m = mg / 1000, L1 = l1 / 100, L2 = l2 / 100;
+  const p = {
+    ...defaultsFor('hinged'), pivotHeight: L1 * Math.cos(0.55) * s, longArm: L1 * s, shortArm: L2 * s, armMass: mb * s ** 3, cwMass: M * s ** 3, hingeLength: (l3 / 100) * s,
+    projMass: m * s ** 3, projRadius: 0.02 * s, slingLength: (l4 / 100) * s, airDensity: 0, axleMu: 0, troughMu: 0,
+  };
+  const mech = build('hinged', p);
+  Object.assign(mech.bodies[mech.counterweight!], { shape: { kind: 'disk', radius: 0.02 * s } }); // the discs clear the ground; only the check sees this
+  return mech;
+}
+
+describe('Horsdal et al.: as três máquinas otimizadas da tabela 4 (cálculo ab initio deles)', () => {
+  for (const [nome, len, M, mg, mb, R, T, eps] of TABLE4)
+    it(`${nome}: alcance ${R} m, energia ${T} J, eficiência ${eps} %`, () => {
+      const [L1, L2] = [len[0] / 100, len[1] / 100];
+      const dU = (M * L2 - mb * ((L1 - L2) / 2)) * 9.81 * (1 + Math.cos(0.55));
+      const b = best(() => optimized(len, M, mg, mb), 34, 46);
+      const m = optimized(len, M, mg, mb);
+      m.releaseAngle = (b.deg * Math.PI) / 180;
+      const r = simulate(m, { afterRelease: 0 });
+      const Tt = 0.5 * (mg / 1000) * r.release!.speed ** 2 + (mg / 1000) * 9.81 * r.release!.p[1]; // the paper's T: kinetic + potential at release
+      expect(Math.abs(b.range - R) / R).toBeLessThan(0.02);
+      expect(Math.abs(Tt - T) / T).toBeLessThan(0.03);
+      expect(Math.abs((100 * Tt) / dU - eps)).toBeLessThan(2.5);
+    });
+});
+
+describe('semelhança dinâmica (a premissa de escala do artigo)', () => {
+  it('comprimentos ×2 e massas ×8, sem atrito e no vácuo: alcance ×2 e tempos ×√2', () => {
+    const [, len, M, mg, mb] = TABLE4[0];
+    const shot = (s: number) => { const m = optimized(len, M, mg, mb, s); m.releaseAngle = (40 * Math.PI) / 180; return simulate(m, { afterRelease: 0 }); };
+    const [a, b] = [shot(1), shot(2)];
+    expect(b.range / a.range).toBeCloseTo(2, 2);
+    expect(b.release!.t / a.release!.t).toBeCloseTo(Math.SQRT2, 2);
+    expect(b.release!.speed / a.release!.speed).toBeCloseTo(Math.SQRT2, 2);
+  });
+});
+
+// The authors blame the 8 % between their friction-corrected ab initio range and their measured kinematics on missing
+// degrees of freedom. Two candidates this model can test, and cannot confirm: the beam's inertia is known to ±0.15 kg·m²,
+// and a flexible trestle (their own model: "very little influence on range").
+describe('Horsdal et al.: o que não explica a diferença contra o campo', () => {
+  it('a incerteza de ±0,15 kg·m² na inércia da viga move o alcance menos de 3 %', () => {
+    const r = (ib: number) => best(() => horsdal(0.717, 0.87, true, false, ib)).range;
+    expect(Math.abs(r(IB + 0.15) / r(IB) - 1)).toBeLessThan(0.03);
+    expect(Math.abs(r(IB - 0.15) / r(IB) - 1)).toBeLessThan(0.03);
+  });
+
+  it('um cavalete que cede (100 kg em molas de 50 kN/m) muda o alcance menos de 0,5 %', () => {
+    const rigid = best(() => horsdal(0.717)).range;
+    const soft = best(() => horsdal(0.717, 0.87, true, false, IB, { mass: 100, k: 5e4 })).range;
+    expect(Math.abs(soft / rigid - 1)).toBeLessThan(0.005);
   });
 });

@@ -14,6 +14,15 @@ Referência: Horsdal, Johnsen e Rasmussen (Aarhus), arXiv:2502.19442. Máquina p
 - **No ar e com atrito:** 38,4 m e 29,3 m, logo abaixo do ab initio sem atrito deles (39,5 e 30,6 m). Contra os tiros de campo (34,4 ± 1,5 m e 24,9 ± 1,5 m) o modelo fica 13 % e 18 % acima. É o limite do corpo rígido que o próprio artigo encontra (~4σ acima do campo; atribui o resto a flexão do cavalete e da viga, graus de liberdade ausentes). Não foi ajustado nada para fechar essa diferença.
 - **Funda de 0,93 m contra 0,87 m:** +4 % no modelo, +9 ± 6 % no campo.
 
+### Segunda rodada de validação com Horsdal (mesmo dia)
+
+- **As três máquinas otimizadas da tabela 4** (viga uniforme, calculadas ab initio pelo autor): alcance 36,9 / 50,2 / 50,4 m contra 36,6 / 50 / 50, energia no alvo 142 / 25 / 352 J contra 141 / 25 / 350, eficiência 92 / 93 / 92 % contra 91 / 93 / 91.
+- **Semelhança dinâmica** (a premissa de escala do artigo): comprimentos ×2 e massas ×8 dão alcance ×2 e tempos ×√2, sem atrito e no vácuo.
+- **O que não explica os 13–18 % contra o campo** (testado, e guardado como teste): a incerteza de ±0,15 kg·m² na inércia da viga move o alcance ±2 %; um cavalete que cede (100 kg em molas de 50 kN/m) muda menos de 0,1 %, o que confirma a afirmação do artigo. O resto continua sem explicação (o artigo suspeita da flexão da viga, que o motor não modela).
+- **Contrapeso mínimo para o alvo:** botão novo, varre a faixa do contrapeso e refina o primeiro valor que chega ao alvo, com o resto do design como está (`minCounterweight`). O campo da distância-alvo ficou sempre visível, porque o botão depende dele.
+- `learn.html` cita a validação e as duas referências de Horsdal; o aviso de chunk grande do build sumiu (o chunk 3D é o three.js).
+- **Não feito:** soltura pelo anel no pino da funda (o artigo estima ~20 ms de atraso). O ganho seria de décimos de metro, a soltura por ângulo da velocidade escolhe o mesmo instante ótimo, e mexer na soltura do solver arrisca os 14 tipos.
+
 ### Melhorias vindas da comparação com outros simuladores (jstreb, Trebuchator, VirtualTrebuchet)
 
 - **Distância-alvo** (objetivo do otimizador): acha os valores das variáveis livres que fazem o tiro cair a X m; a tabela mostra o erro em metros. Verificado no navegador: de 1000 kg (erro de 124 m) para 316 kg, erro 0,00 m, alvo de 60 m. Não faz "contrapeso mínimo para X m": com várias variáveis há várias respostas, e a tabela lista as distintas.
