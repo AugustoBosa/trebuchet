@@ -128,7 +128,7 @@ function structureTable(a: Checks | undefined) {
 function physicsPanel(r: Result, m: Mechanism, checks?: Checks) {
   if (!r.release || r.inputEnergy <= 0) return void ($('physics').innerHTML = structureTable(checks));
   const kj = joules;
-  const mp = m.bodies[m.projectile].mass;
+  const mp = m.bodies[m.projectile].mass - (m.pouch ?? 0); // the stone, without the sling's pouch
   const source = [m.counterweight !== undefined && 'queda do contrapeso M·g·Δh', m.pulls?.length && 'trabalho da equipe F·s', m.springs?.length && 'energia das molas ½k·x²'].filter(Boolean).join(' + ');
   const ideal = (2 * r.inputEnergy) / (mp * G);
   const ratios: string[] = [];

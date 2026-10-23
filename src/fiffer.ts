@@ -135,7 +135,7 @@ export function buildFiffer(p: Params, x: { slingLB?: number; pinLB?: number; ti
     { kind: 'pin', a: CON, pa: loc(connector, connAng, knee), b: UP, pb: loc(upper, upperAng, knee) },
   ];
   return {
-    bodies, joints, projectile: PROJ, counterweight: CW, sling: 0, axle: 2,
+    bodies, joints, projectile: PROJ, counterweight: CW, sling: 0, axle: 2, pouch: slingLB * LB,
     releaseAngle: (p.releaseDeg * Math.PI) / 180,
     air: { density: p.airDensity, cd: p.dragCd },
   };

@@ -55,6 +55,7 @@ export interface Mechanism {
   axle: number; // joint index, reported as main structural load
   releaseAngle: number; // release when projectile velocity angle drops to this (rad above horizontal)
   air: { density: number; cd: number };
+  pouch?: number; // kg of the projectile body that is sling (pouch + cords): rides with the stone, stays behind at release
   restitution?: number; // e of the parts' impacts (floors, rollers, stops); 0 = they thud. Ropes always snap taut inelastically.
 }
 

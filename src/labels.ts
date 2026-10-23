@@ -13,6 +13,7 @@ export const LABELS: Record<keyof Params, string> = {
   projMass: 'Projétil (kg)',
   projRadius: 'Raio do projétil (m)',
   slingLength: 'Funda (m)',
+  slingMass: 'Massa da funda: bolsa + cordas (kg)',
   releaseDeg: 'Ângulo de liberação (°)',
   airDensity: 'Densidade do ar (kg/m³)',
   dragCd: 'Coef. de arrasto Cd',
@@ -37,7 +38,7 @@ export const LABELS: Record<keyof Params, string> = {
 export const RANGES: Record<keyof Params, [number, number, number]> = {
   pivotHeight: [0.5, 15, 0.1], longArm: [0.2, 20, 0.01], shortArm: [0.05, 8, 0.01], armMass: [0.1, 2000, 0.1],
   cwMass: [1, 20000, 0.1], cwDensity: [1000, 11300, 100], hingeLength: [0.1, 5, 0.05], crewForce: [100, 50000, 100], pullStroke: [0.2, 5, 0.1],
-  projMass: [0.01, 200, 0.005], projRadius: [0.01, 0.5, 0.002], slingLength: [0.3, 20, 0.1], releaseDeg: [0, 90, 1],
+  projMass: [0.01, 200, 0.005], projRadius: [0.01, 0.5, 0.002], slingLength: [0.3, 20, 0.1], slingMass: [0, 20, 0.005], releaseDeg: [0, 90, 1],
   airDensity: [0, 1.5, 0.005], dragCd: [0, 1.5, 0.01], axleMu: [0, 1, 0.01], axleRadius: [0.001, 0.3, 0.001], troughMu: [0, 1, 0.01], rollCrr: [0, 0.05, 0.001], impactE: [0, 0.9, 0.05], cockDeg: [0, 85, 1], legLength: [0.1, 10, 0.01], legMass: [0.1, 500, 0.1],
   pulleyHeight: [1, 30, 0.1], camStart: [0.02, 3, 0.01], camEnd: [0.01, 3, 0.01], axleLift: [0.05, 5, 0.01], rollerOffset: [0.05, 10, 0.01], springK: [100, 200000, 100], springRest: [0.1, 10, 0.05],
 };
@@ -54,6 +55,7 @@ export const HINTS: Record<keyof Params, string> = {
   projMass: 'Mais leve = mais rápido, até o arrasto e a eficiência cobrarem o preço.',
   projRadius: 'Define a área frontal para o arrasto (A = πr²).',
   slingLength: 'A funda é o segundo estágio da alavanca. O ótimo costuma ficar perto do braço longo.',
+  slingMass: 'Gira junto com o projétil e fica na funda na soltura: tira energia do tiro. 0 = funda sem massa. Uma bolsa de couro com cordas pesa ~5 a 15 % do projétil.',
   releaseDeg: 'Direção da velocidade na soltura. Sem ar o ótimo é ~45°; com ar e altura, um pouco menos.',
   airDensity: '1,225 kg/m³ ao nível do mar; 0 desliga o arrasto.',
   dragCd: 'Esfera lisa ≈ 0,47. Pedras irregulares, mais.',

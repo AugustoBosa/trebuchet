@@ -15,7 +15,7 @@ const V_SLIP = 0.01;
 export function dragK3(m: Mechanism3): number {
   const p = m.bodies[m.projectile];
   const r = p.shape.kind === 'disk' ? p.shape.radius : 0;
-  return (0.5 * m.air.density * m.air.cd * Math.PI * r * r) / p.mass;
+  return (0.5 * m.air.density * m.air.cd * Math.PI * r * r) / (p.mass - (m.pouch ?? 0)); // the stone alone, see dragK
 }
 
 export function initialState3(m: Mechanism3): State3 {
@@ -146,7 +146,7 @@ export function accelerations3(m: Mechanism3, s: State3, active: boolean[], prev
   });
   const p = 6 * m.projectile, wind = m.air.wind ?? [0, 0, 0];
   const rel: V3 = [s.v[p] - wind[0], s.v[p + 1] - wind[1], s.v[p + 2] - wind[2]];
-  const kd = dragK3(m) * m.bodies[m.projectile].mass * Math.hypot(...rel);
+  const kd = dragK3(m) * (m.bodies[m.projectile].mass - (m.pouch ?? 0)) * Math.hypot(...rel);
   for (let c = 0; c < 3; c++) F[p + c] -= kd * rel[c];
   for (const pl of m.pulls ?? []) {
     const P = point3(s, pl.body, pl.local);
@@ -392,7 +392,7 @@ export function simulate3(m: Mechanism3, opts: { dt?: number; tMax?: number; fra
       const v: V3 = [sr.v[6 * P], sr.v[6 * P + 1], sr.v[6 * P + 2]];
       const speed = Math.hypot(...v);
       res.release = { t: t + u * dt, p, v, speed, angle: Math.atan2(v[1], Math.hypot(v[0], v[2])) };
-      const mp = m.bodies[P].mass;
+      const mp = m.bodies[P].mass - (m.pouch ?? 0);
       const eProj = 0.5 * mp * speed * speed + mp * G * (p[1] - y0p);
       const work = (m.pulls ?? []).reduce((w, pl, k) => w + pl.force * (y0pulls[k] - Math.max(pl.untilY, point3(sr, pl.body, pl.local).p[1])), 0);
       res.inputEnergy = work + (cw === undefined ? 0 : m.bodies[cw].mass * G * (y0cw - sr.q[7 * cw + 1])) + springPE(m, initialState3(m)) - springPE(m, sr);

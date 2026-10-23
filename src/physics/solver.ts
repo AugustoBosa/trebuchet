@@ -6,10 +6,11 @@ import { G, type Mechanism, type Vec } from './model';
 const GROUND_TOL = 0.02; // m of penetration tolerated before a part counts as hitting the ground
 const STAB = 100; // Baumgarte stabilization frequency (rad/s): pulls drifted constraints back
 
+// deceleration factor of the stone alone (the sling's pouch stays behind at release); × its mass = the force factor
 export function dragK(m: Mechanism): number {
   const p = m.bodies[m.projectile];
   const r = p.shape.kind === 'disk' ? p.shape.radius : 0;
-  return (0.5 * m.air.density * m.air.cd * Math.PI * r * r) / p.mass;
+  return (0.5 * m.air.density * m.air.cd * Math.PI * r * r) / (p.mass - (m.pouch ?? 0));
 }
 
 export function initialState(m: Mechanism): State {
@@ -120,7 +121,7 @@ function constants(m: Mechanism) {
       invM[3 * i + 2] = 1 / b.inertia;
       F0[3 * i + 1] = -b.mass * G;
     });
-    c = { invM, F0, drag: dragK(m) * m.bodies[m.projectile].mass };
+    c = { invM, F0, drag: dragK(m) * (m.bodies[m.projectile].mass - (m.pouch ?? 0)) };
     constCache.set(m, c);
   }
   return c;
@@ -515,7 +516,7 @@ export function simulate(
       const v: Vec = [sr.v[P], sr.v[P + 1]];
       const speed = Math.hypot(v[0], v[1]);
       res.release = { t: t + u * dt, p, v, speed, angle: Math.atan2(v[1], v[0]) };
-      const mp = m.bodies[m.projectile].mass;
+      const mp = m.bodies[m.projectile].mass - (m.pouch ?? 0); // the stone; the pouch's energy stays in the sling
       const eProj = 0.5 * mp * speed * speed + mp * G * (p[1] - y0p);
       const work = (m.pulls ?? []).reduce((w, pl, k) => w + pl.force * (y0pulls[k] - Math.max(pl.untilY, point(sr, pl.body, pl.local).p[1])), 0);
       res.inputEnergy = work + (cw === undefined ? 0 : m.bodies[cw].mass * G * (y0cw - sr.q[3 * cw + 1])) + springPE(m, initialState(m)) - springPE(m, sr);

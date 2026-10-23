@@ -17,6 +17,7 @@ export const defaults = {
   projMass: 10,
   projRadius: 0.1,
   slingLength: 4.5,
+  slingMass: 0, // kg, pouch + cords: swings with the stone, stays behind at release (0 = massless sling)
   releaseDeg: 45, // projectile velocity angle at release
   airDensity: 1.225,
   dragCd: 0.47, // sphere
@@ -40,7 +41,7 @@ export type Params = typeof defaults;
 export type Kind = 'fixed' | 'hinged' | 'floating' | 'traction' | 'whipper' | 'walking' | 'murlin' | 'wheel' | 'f2k' | 'fet' | 'ka' | 'faka' | 'spring' | 'fiffer';
 
 const BASE: (keyof Params)[] = ['pivotHeight', 'longArm', 'shortArm', 'armMass'];
-const SHOT: (keyof Params)[] = ['projMass', 'projRadius', 'slingLength', 'releaseDeg', 'airDensity', 'dragCd', 'axleMu', 'axleRadius', 'troughMu'];
+const SHOT: (keyof Params)[] = ['projMass', 'projRadius', 'slingLength', 'slingMass', 'releaseDeg', 'airDensity', 'dragCd', 'axleMu', 'axleRadius', 'troughMu'];
 
 // preset: starting values for kinds whose geometry differs from the shared defaults
 export const KINDS: Record<Kind, { label: string; info: string; fields: (keyof Params)[]; preset?: Partial<Params> }> = {
@@ -183,7 +184,7 @@ export function build(kind: Kind, p: Params): Mechanism {
     },
     {
       name: 'projétil',
-      mass: p.projMass,
+      mass: p.projMass + p.slingMass, // the pouch swings with the stone (m.pouch below)
       inertia: 0.4 * p.projMass * r * r,
       pos: hanging ? [tip[0], tip[1] - p.slingLength] : [tip[0] + Math.sqrt(p.slingLength ** 2 - dy * dy), r],
       angle: 0,
@@ -205,6 +206,7 @@ export function build(kind: Kind, p: Params): Mechanism {
     releaseAngle: (p.releaseDeg * Math.PI) / 180,
     air: { density: p.airDensity, cd: p.dragCd },
     ...(p.impactE ? { restitution: p.impactE } : {}),
+    ...(p.slingMass ? { pouch: p.slingMass } : {}),
   };
   const addCW = (pos: Vec) => {
     bodies.push({ name: 'contrapeso', mass: p.cwMass, inertia: 0.5 * p.cwMass * cwR * cwR, pos, angle: kind === 'fixed' || kind === 'walking' ? th : 0, shape: { kind: 'disk', radius: cwR } }); // welded kinds start aligned with the arm

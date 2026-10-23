@@ -290,7 +290,7 @@ export function presetParts(c: PresetCtx): Part[] {
     ...param('dragCd'), ...param('troughMu'),
   ]);
 
-  add('sling', 'Funda', [...param('slingLength'), ...param('releaseDeg'), ...ropeRows(...specOf('sling'), peak(r, m.sling), checkRows(a, 'sling'))]);
+  add('sling', 'Funda', [...param('slingLength'), ...param('slingMass'), ...param('releaseDeg'), ...ropeRows(...specOf('sling'), peak(r, m.sling), checkRows(a, 'sling'))]);
   const legI = m.bodies.findIndex((b) => b.name === 'perna');
   if (legI >= 0) {
     const legL = shape(legI)?.kind === 'rod' ? (shape(legI) as { length: number }).length : 0;
