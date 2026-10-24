@@ -75,3 +75,7 @@ export const HINTS: Record<keyof Params, string> = {
   springK: 'Mola: força por metro esticado. Energia = ½k·(esticado² − sobra²).',
   springRest: 'Mola: comprimento sem tensão. Mais curta = mais esticada no início = mais energia, e a força só some quando ela volta a esse comprimento.',
 };
+
+// numbers on screen in pt-BR (1,25, like the number inputs); no thousands separator, also like the inputs
+export const br = (v: number, d?: number) =>
+  v.toLocaleString('pt-BR', d === undefined ? { maximumSignificantDigits: 4, useGrouping: false } : { minimumFractionDigits: d, maximumFractionDigits: d, useGrouping: false });

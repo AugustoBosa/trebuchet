@@ -2,6 +2,19 @@
 
 Simulador de trebuchets (Vite + TypeScript). Rodar: `npm run dev` · testes: `npm test` · build: `npm run build`.
 
+## 2026-10-23: redesenho da interface (branch `feat/redesign`)
+
+Diagnóstico, crítica, direção e verificação em `docs/redesign/`. Direção "prancha técnica": papel neutro, réguas finas no lugar de cartões, letra DIN (Bahnschrift), um acento laranja de revisão; tokens únicos em `src/theme.css` para as duas páginas.
+
+- **Layout:** cabeçalho com título e tipo; lateral com abas Projeto · Otimizar · Designs e rolagem própria; "Disparar" fixo no pé; a máquina e os resultados ficam sempre na tela. A aba Otimizar alarga a lateral para a tabela caber.
+- **Resultados** em carimbo: alcance e eficiência grandes, com o ganho ou a perda contra o tiro anterior.
+- **Desfazer/refazer** de designs inteiros (botões, Ctrl+Z, Ctrl+Shift+Z).
+- **Parâmetros** em grupos: Máquina, Projétil e funda, Ambiente e atrito (recolhido).
+- **Editor livre:** ferramentas em três grupos com legenda; "Trilho horiz./vert." no lugar de glifos que a fonte não tem.
+- **Números em pt-BR** em toda a interface e nos gráficos; ícones SVG no lugar de ⓘ ✎ ✕.
+- **Celular:** título e tipo no topo, página 35 % mais curta.
+- `learn.html`: "14 modelos" (estava 13).
+
 ## 2026-10-23: validação do articulado contra um trebuchet instrumentado (`test/horsdal.test.ts`)
 
 Referência: Horsdal, Johnsen e Rasmussen (Aarhus), arXiv:2502.19442. Máquina pequena com sensores de rotação em braço, contrapeso e funda; a tabela 1 dá todos os parâmetros (viga não uniforme, I = 1,85 kg·m², centro de massa a 0,465 m do eixo).

@@ -1,6 +1,6 @@
 import { css, drawChart, sizeCanvases, timeAt, type ChartSpec } from './charts';
 import { createEditor } from './editor';
-import { HINTS, LABELS, RANGES } from './labels';
+import { br, HINTS, LABELS, RANGES } from './labels';
 import { mountOptimizer } from './optimizer-ui';
 import { G, type Mechanism, type Vec } from './physics/model';
 import { initialState, simulate, type Result } from './physics/solver';
@@ -28,7 +28,7 @@ sizeCanvases();
 const params: Params = { ...defaults }; // values survive switching type
 kindSel.innerHTML =
   Object.entries(KINDS).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('') +
-  '<option value="free">✎ Editor livre</option>';
+  '<option value="free">Editor livre (montar do zero)</option>';
 
 const isFree = () => kindSel.value === 'free';
 const editor = createEditor({
@@ -59,6 +59,8 @@ function buildForm() {
   kindSel.dataset.prev = kindSel.value; // what the next type switch is switching from
   $('preset-panel').hidden = isFree();
   $('free-panel').hidden = !isFree();
+  $<HTMLButtonElement>('tab-opt').disabled = isFree();
+  if (isFree() && !$('pane-opt').hidden) selectTab($<HTMLButtonElement>('tab-proj'));
   if (isFree()) {
     $('info-title').textContent = kindSel.selectedOptions[0].text;
     $('info').textContent = 'Monte seu próprio mecanismo com barras, massas e juntas. Escolha uma ferramenta e passe o mouse sobre ela para ver como usá-la.';
@@ -68,15 +70,48 @@ function buildForm() {
   optimizer.refresh();
   $('info').textContent = k.info + ' Arraste os pontos marcados no desenho para mudar a geometria.';
   $('info-title').textContent = kindSel.selectedOptions[0].text;
-  form.innerHTML = k.fields
-    .map((f) => {
-      const [min, max, step] = RANGES[f];
-      return `<label title="${HINTS[f]}" data-f="${f}"><span>${LABELS[f]}</span>
-        <input type="number" aria-label="${LABELS[f]}" data-num="${f}" step="any" value="${params[f]}">
-        <input type="range" aria-label="${LABELS[f]}" name="${f}" min="${min}" max="${max}" step="${step}" value="${params[f]}"></label>`;
-    })
+  const field = (f: keyof Params) => {
+    const [min, max, step] = RANGES[f];
+    return `<label data-f="${f}"><span>${LABELS[f]}</span>
+        <input type="number" aria-label="${LABELS[f]}" aria-describedby="hint" data-num="${f}" step="any" value="${params[f]}">
+        <input type="range" aria-label="${LABELS[f]}" aria-describedby="hint" name="${f}" min="${min}" max="${max}" step="${step}" value="${params[f]}"></label>`;
+  };
+  // the machine first, then what it throws, then the surroundings (folded: rarely changed)
+  const groups = [
+    ['Máquina', k.fields.filter((f) => !SHOT_FIELDS.includes(f) && !ENV_FIELDS.includes(f))],
+    ['Projétil e funda', k.fields.filter((f) => SHOT_FIELDS.includes(f))],
+    ['Ambiente e atrito', k.fields.filter((f) => ENV_FIELDS.includes(f))],
+  ] as const;
+  form.innerHTML = groups
+    .filter(([, fs]) => fs.length)
+    .map(([title, fs]) => title === 'Ambiente e atrito'
+      ? `<details class="group"><summary>${title}<span class="muted">${fs.length} valores</span></summary>${fs.map(field).join('')}</details>`
+      : `<div class="group"><h2>${title}</h2>${fs.map(field).join('')}</div>`)
     .join('');
 }
+const SHOT_FIELDS: (keyof Params)[] = ['projMass', 'projRadius', 'slingLength', 'slingMass', 'releaseDeg'];
+const ENV_FIELDS: (keyof Params)[] = ['airDensity', 'dragCd', 'axleMu', 'axleRadius', 'troughMu', 'rollCrr', 'impactE'];
+
+// --- sidebar tabs (Projeto · Otimizar · Designs); the optimizer has nothing to work on in the free editor ---
+const tabs = [...document.querySelectorAll<HTMLButtonElement>('[role=tab]')];
+function selectTab(tab: HTMLButtonElement) {
+  for (const t of tabs) {
+    const on = t === tab;
+    t.setAttribute('aria-selected', String(on));
+    t.tabIndex = on ? 0 : -1;
+    $(t.getAttribute('aria-controls')!).hidden = !on;
+  }
+}
+tabs.forEach((t, i) => {
+  t.addEventListener('click', () => selectTab(t));
+  t.addEventListener('keydown', (e) => {
+    const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+    if (!d) return;
+    const next = tabs.slice(i + 1).concat(tabs.slice(0, i)).filter((x) => !x.disabled);
+    const to = d > 0 ? next[0] : next.at(-1);
+    if (to) (selectTab(to), to.focus());
+  });
+});
 
 function bounds(): Bounds {
   if (isFree()) return editor.bounds();
@@ -96,21 +131,37 @@ function mechanismOrError(): Mechanism | undefined {
 }
 
 // kJ for full-size machines, J for tabletop ones
-const joules = (j: number) => (Math.abs(j) < 1000 ? `${j.toFixed(1)} J` : `${(j / 1000).toFixed(2)} kJ`);
+const joules = (j: number) => (Math.abs(j) < 1000 ? `${br(j, 1)} J` : `${br(j / 1000, 2)} kJ`);
+
+// the previous shot of a different design: range and efficiency show how much the last change gained or lost
+let prevShot: { key: string; range: number; eff: number } | undefined;
+let shownShot: typeof prevShot;
+const delta = (now: number, before: number | undefined, d: number, unit: string) => {
+  if (before === undefined || Math.abs(now - before) < 0.5 * 10 ** -d) return '';
+  const up = now > before;
+  return `<span class="delta ${up ? 'up' : 'down'}" title="Contra o tiro anterior">${up ? '+' : '−'}${br(Math.abs(now - before), d)}${unit}</span>`;
+};
 
 function stats(r: Result, m: Mechanism, lateral?: number, broke?: boolean) {
+  const range = broke ? 0 : r.range, eff = r.inputEnergy > 0 ? r.efficiency * 100 : NaN;
+  const key = JSON.stringify(design()) + is3d();
+  if (shownShot && shownShot.key !== key) prevShot = shownShot; // re-runs of the same design keep the old comparison
+  shownShot = { key, range, eff };
+  const keyItems: [string, string][] = [
+    ['Alcance', `${br(range, 1)} m${delta(range, prevShot?.range, 1, ' m')}${broke ? '<small>quebrou</small>' : ''}`],
+    ['Eficiência', Number.isNaN(eff) ? '—' : `${br(eff, 1)} %${delta(eff, Number.isNaN(prevShot?.eff ?? NaN) ? undefined : prevShot?.eff, 1, ' p.p.')}`],
+  ];
   const items: [string, string][] = [
-    ['Alcance', broke ? '0 m<small>quebrou</small>' : `${r.range.toFixed(1)} m`],
-    ...(lateral === undefined ? [] : [['Desvio lateral', `${lateral.toFixed(2)} m`] as [string, string]]),
-    ['Eficiência', r.inputEnergy > 0 ? `${(r.efficiency * 100).toFixed(1)} %` : '—'],
-    ['Velocidade de saída', `${r.release?.speed.toFixed(1) ?? '—'} m/s`],
-    ['Ângulo / altura de saída', r.release ? `${((r.release.angle * 180) / Math.PI).toFixed(0)}° / ${r.release.p[1].toFixed(1)} m` : '—'],
-    ['Pico de força no eixo', `${(r.peakForce[m.axle] / 1000).toFixed(1)} kN`],
-    ['Pico de tração na funda', `${(r.peakForce[m.sling] / 1000).toFixed(2)} kN`],
-    ...(r.peakBending ? [['Pico de flexão no braço', `${r.peakBending.moment < 1000 ? `${r.peakBending.moment.toFixed(1)} N·m` : `${(r.peakBending.moment / 1000).toFixed(1)} kN·m`}<small>${r.peakBending.fromAxle < 0.02 ? 'no eixo' : `a ${r.peakBending.fromAxle.toFixed(2)} m do eixo, braço ${r.peakBending.long ? 'longo' : 'curto'}`}</small>`] as [string, string]] : []),
+    ...(lateral === undefined ? [] : [['Desvio lateral', `${br(lateral, 2)} m`] as [string, string]]),
+    ['Velocidade de saída', r.release ? `${br(r.release.speed, 1)} m/s` : '—'],
+    ['Ângulo / altura de saída', r.release ? `${br((r.release.angle * 180) / Math.PI, 0)}° / ${br(r.release.p[1], 1)} m` : '—'],
+    ['Pico de força no eixo', `${br(r.peakForce[m.axle] / 1000, 1)} kN`],
+    ['Pico de tração na funda', `${br(r.peakForce[m.sling] / 1000, 2)} kN`],
+    ...(r.peakBending ? [['Pico de flexão no braço', `${r.peakBending.moment < 1000 ? `${br(r.peakBending.moment, 1)} N·m` : `${br(r.peakBending.moment / 1000, 1)} kN·m`}<small>${r.peakBending.fromAxle < 0.02 ? 'no eixo' : `a ${br(r.peakBending.fromAxle, 2)} m do eixo, braço ${r.peakBending.long ? 'longo' : 'curto'}`}</small>`] as [string, string]] : []),
     ['Perdas (atrito, ar, impactos)', joules(r.dissipated)],
   ];
-  $('stats').innerHTML = items.map(([k, v]) => `<div class="stat"><span>${k}</span><b>${v}</b></div>`).join('');
+  const cell = (cls: string) => ([k, v]: [string, string]) => `<div class="stat${cls}"><span>${k}</span><b>${v}</b></div>`;
+  $('stats').innerHTML = keyItems.map(cell(' key')).join('') + items.map(cell('')).join('');
 }
 
 const PART_NAME: Record<string, string> = { arm: 'Braço', axle: 'Eixo', frame: 'Pórtico', hanger: 'Haste do contrapeso', sling: 'Funda', string: 'Corda', cam: 'Corda do contrapeso', leg: 'Perna' };
@@ -118,7 +169,7 @@ const PART_NAME: Record<string, string> = { arm: 'Braço', axle: 'Eixo', frame: 
 function structureTable(a: Checks | undefined) {
   if (!a) return '';
   const rup = byPart(a.rupture), des = byPart(a.design), mode = breakMode();
-  const fs = (c: Check | undefined, on: boolean) => `<td class="n${c && c.u > 1 ? ' fail' : ''}${on ? ' on' : ''}">${c ? (1 / c.u).toFixed(2).replace('.', ',') : '—'}</td>`;
+  const fs = (c: Check | undefined, on: boolean) => `<td class="n${c && c.u > 1 ? ' fail' : ''}${on ? ' on' : ''}">${c ? br(1 / c.u, 2) : '—'}</td>`;
   const rows = [...rup.keys()].map((id) => `<tr><td>${PART_NAME[id] ?? id}</td><td>${esc(rup.get(id)!.label.replace(/^[^:]+: /, ''))}</td>${fs(rup.get(id), mode === 'rupture')}${fs(des.get(id), mode === 'design')}</tr>`);
   return `<h2>Estrutura: fator de segurança</h2>
     <table class="fs"><thead><tr><th>Peça</th><th>Verificação crítica (ruptura)</th><th>Ruptura</th><th>Projeto (NBR)</th></tr></thead><tbody>${rows.join('')}</tbody></table>
@@ -132,16 +183,16 @@ function physicsPanel(r: Result, m: Mechanism, checks?: Checks) {
   const source = [m.counterweight !== undefined && 'queda do contrapeso M·g·Δh', m.pulls?.length && 'trabalho da equipe F·s', m.springs?.length && 'energia das molas ½k·x²'].filter(Boolean).join(' + ');
   const ideal = (2 * r.inputEnergy) / (mp * G);
   const ratios: string[] = [];
-  if (m.counterweight !== undefined) ratios.push(`razão de massas M/m = <b>${(m.bodies[m.counterweight].mass / mp).toFixed(0)}</b>`);
-  if (!isFree()) ratios.push(`razão de braços L₁/L₂ = <b>${(params.longArm / params.shortArm).toFixed(2)}</b>`);
+  if (m.counterweight !== undefined) ratios.push(`razão de massas M/m = <b>${br(m.bodies[m.counterweight].mass / mp, 0)}</b>`);
+  if (!isFree()) ratios.push(`razão de braços L₁/L₂ = <b>${br(params.longArm / params.shortArm, 2)}</b>`);
   $('physics').innerHTML = `
     <h2>Para onde foi a energia</h2>
     <ul>
       <li>Entrada (${source}): <b>${kj(r.inputEnergy)}</b></li>
-      <li>Projétil na soltura (½mv² + mgh): <b>${kj(r.efficiency * r.inputEnergy)}</b> → eficiência η = <b>${(r.efficiency * 100).toFixed(1)}%</b></li>
+      <li>Projétil na soltura (½mv² + mgh): <b>${kj(r.efficiency * r.inputEnergy)}</b> → eficiência η = <b>${br(r.efficiency * 100, 1)} %</b></li>
       <li>Perdas por atrito, ar e impactos (trancos da funda, peças que se chocam): <b>${kj(r.dissipated)}</b>. O resto ficou nas outras peças em movimento.</li>
       ${ratios.length ? `<li>${ratios.join(', ')}</li>` : ''}
-      <li>Alcance ideal (η = 100%, sem ar, do chão a 45°): R = 2E/(m·g) = <b>${ideal.toFixed(0)} m</b>. O real é <b>${r.range.toFixed(0)} m</b> (${((100 * r.range) / ideal).toFixed(0)}% do ideal).</li>
+      <li>Alcance ideal (η = 100%, sem ar, do chão a 45°): R = 2E/(m·g) = <b>${br(ideal, 0)} m</b>. O real é <b>${br(r.range, 0)} m</b> (${br((100 * r.range) / ideal, 0)} % do ideal).</li>
     </ul>${structureTable(checks)}`;
 }
 
@@ -349,7 +400,7 @@ function renderInspector(scroll = false) {
   const focused = box.contains(document.activeElement) ? (document.activeElement as HTMLElement).id || (document.activeElement as HTMLElement).dataset.i : undefined;
   box.innerHTML = `<header>
       <select id="part-pick" aria-label="Peça">${cardParts.map((p) => `<option value="${esc(p.id)}"${p.id === part.id ? ' selected' : ''}>${esc(p.title)}</option>`).join('')}</select>
-      <button type="button" class="ghost" data-act="close" aria-label="Fechar a ficha">✕</button>
+      <button type="button" class="ghost" data-act="close" aria-label="Fechar a ficha"><svg class="ico" aria-hidden="true"><use href="#i-x"/></svg></button>
     </header>
     ${part.rows.map((row, i) => `<div class="r${row.status ? ` ${row.status}` : ''}"><span${row.hint ? ` title="${esc(row.hint)}"` : ''}>${esc(row.label)}</span>${row.input ? input(row, i) : `<b>${esc(row.value ?? '')}</b>`}${row.note ? `<small>${esc(row.note)}</small>` : ''}</div>`).join('')}
     ${part.note ? `<p class="note">${esc(part.note)}</p>` : ''}`;
@@ -382,7 +433,7 @@ function closeCard() {
   else (selPart = undefined), renderInspector();
   $('parts-btn').focus(); // back where keyboard users open it
 }
-$('inspector').addEventListener('click', (e) => (e.target as HTMLElement).dataset.act === 'close' && closeCard());
+$('inspector').addEventListener('click', (e) => (e.target as HTMLElement).closest<HTMLElement>('[data-act=close]') && closeCard());
 $('inspector').addEventListener('keydown', (e) => e.key === 'Escape' && closeCard());
 // keyboard (and a way to reach parts with no drawing of their own): open the card on the first part, or move to it
 $('parts-btn').addEventListener('click', () => {
@@ -570,6 +621,7 @@ function run() {
     return;
   }
   saveCurrent(design());
+  record();
   const id = ++runId;
   if (!is3d()) return show(m, simulate(m, { afterRelease: 1.5, loadEvery: 2 }));
   // the 3D view checks the structure with the planar shot's joint forces and the 3D solver's rod loads (they match in the
@@ -653,7 +705,7 @@ $('disp3d').addEventListener('click', async () => {
   const pts = ok.map((r): [number, number] => [r.range, r.lateral]);
   const s = scatterStats(pts);
   view3d.setScatter(pts, s);
-  $('node3d').textContent = `Dispersão (${ok.length}/${SHOTS} tiros): alcance ${s.mean[0].toFixed(1)} ± ${s.sd[0].toFixed(1)} m, lateral ${s.mean[1].toFixed(1)} ± ${s.sd[1].toFixed(1)} m; elipse 2σ ${(4 * s.axes[0]).toFixed(1)} × ${(4 * s.axes[1]).toFixed(1)} m.`;
+  $('node3d').textContent = `Dispersão (${ok.length}/${SHOTS} tiros): alcance ${br(s.mean[0], 1)} ± ${br(s.sd[0], 1)} m, lateral ${br(s.mean[1], 1)} ± ${br(s.sd[1], 1)} m; elipse 2σ ${br(4 * s.axes[0], 1)} × ${br(4 * s.axes[1], 1)} m.`;
 });
 
 function show(m: Mechanism, r: Result, m3?: Mechanism3, r3?: Result3) {
@@ -665,7 +717,7 @@ function show(m: Mechanism, r: Result, m3?: Mechanism3, r3?: Result3) {
   physicsPanel(r, m, checks);
   const broke = $('broke');
   broke.hidden = !fail;
-  broke.textContent = fail ? `Falha estrutural, critério de ${mode === 'rupture' ? 'ruptura' : 'projeto (NBR)'}: ${fail.check.label.toLowerCase()} em t = ${fail.t.toFixed(3).replace('.', ',')} s. ${fail.check.fail.detail}. O disparo para aqui; reforce a peça na ficha (clique nela).` : '';
+  broke.textContent = fail ? `Falha estrutural, critério de ${mode === 'rupture' ? 'ruptura' : 'projeto (NBR)'}: ${fail.check.label.toLowerCase()} em t = ${br(fail.t, 3)} s. ${fail.check.fail.detail}. O disparo para aqui; reforce a peça na ficha (clique nela).` : '';
   current = { m, r, b: bounds(), specs: chartSpecs(r, m), m3, r3, sketch: isFree() ? shape(editor.get()) : undefined, checks, fail };
   view3d?.setBroken(fail && { keys: [fail.check.key], t: fail.t, body: fail.body, x: fail.x });
   dataTable(current.specs);
@@ -700,9 +752,40 @@ form.addEventListener('input', (e) => {
   preview();
 });
 form.addEventListener('change', run);
-form.addEventListener('focusin', (e) => {
-  const f = (e.target as HTMLElement).closest('label')?.dataset.f as keyof Params | undefined;
-  if (f) $('hint').textContent = HINTS[f];
+for (const ev of ['focusin', 'mouseover'])
+  form.addEventListener(ev, (e) => {
+    const f = (e.target as HTMLElement).closest('label')?.dataset.f as keyof Params | undefined;
+    if (f) $('hint').textContent = HINTS[f];
+  });
+
+// --- undo / redo over whole designs (type, values, parts, break mode); the free editor keeps its own Ctrl+Z ---
+const past: Design[] = [], future: Design[] = [];
+let lastDesign: string | undefined;
+let restoring = false;
+const designKey = () => JSON.stringify({ ...design(), name: '' }); // renaming isn't a step
+function record() {
+  const s = designKey();
+  if (s === lastDesign) return;
+  if (lastDesign && !restoring) past.push(JSON.parse(lastDesign)), (future.length = 0), past.length > 100 && past.shift();
+  lastDesign = s;
+  $<HTMLButtonElement>('undo').disabled = !past.length;
+  $<HTMLButtonElement>('redo').disabled = !future.length;
+}
+function step(from: Design[], to: Design[]) {
+  const d = from.pop();
+  if (!d || !lastDesign) return;
+  to.push(JSON.parse(lastDesign));
+  restoring = true;
+  load({ ...d, name: $<HTMLInputElement>('name').value });
+  restoring = false;
+}
+$('undo').addEventListener('click', () => step(past, future));
+$('redo').addEventListener('click', () => step(future, past));
+window.addEventListener('keydown', (e) => {
+  if (e.key.toLowerCase() !== 'z' || !(e.ctrlKey || e.metaKey) || isFree() || (e.target as HTMLElement).closest('input[type=text],input[type=number],textarea')) return;
+  e.preventDefault();
+  if (e.shiftKey) step(future, past);
+  else step(past, future);
 });
 kindSel.addEventListener('change', () => {
   // Between two standard kinds your values carry over (compare types like for like). Into or out of a kind with its

@@ -1,3 +1,4 @@
+import { br } from './labels';
 // Minimal time-series line chart on canvas: recessive grid, 2px lines, legend with values at the cursor.
 export interface Series {
   label: string;
@@ -14,6 +15,8 @@ export interface ChartSpec {
   xUnit?: string; // default 's'
 }
 
+// canvas text in the page's lettering (theme.css --font-ui)
+export const FONT = "Bahnschrift, 'DIN Alternate', 'D-DIN', Barlow, system-ui, sans-serif";
 export const css = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
 // CSS height in px; the height attribute becomes the hi-DPI backing size, so the layout value is kept in data-h
@@ -53,7 +56,7 @@ export function drawChart(c: HTMLCanvasElement, spec: ChartSpec, cursor?: number
   const muted = css('--muted');
   const ink = css('--ink');
   g.clearRect(0, 0, w, h);
-  g.font = '12px system-ui, sans-serif';
+  g.font = '12px ' + FONT;
   const all = spec.series.flatMap((s) => s.values).filter(Number.isFinite);
   const yMin = Math.min(0, ...all);
   const yMax0 = Math.max(...all, 1e-9);
@@ -71,12 +74,12 @@ export function drawChart(c: HTMLCanvasElement, spec: ChartSpec, cursor?: number
   g.textBaseline = 'middle';
   for (let v = Math.ceil(yMin / step) * step; v <= yMax + 1e-9; v += step) {
     g.beginPath(); g.moveTo(PAD.l, Y(v)); g.lineTo(w - PAD.r, Y(v)); g.stroke();
-    g.fillText(+v.toPrecision(3) + '', PAD.l - 6, Y(v));
+    g.fillText(br(v), PAD.l - 6, Y(v));
   }
   g.textAlign = 'center';
   g.textBaseline = 'top';
   const ts = niceStep(tMax - t0, 6);
-  for (let t = Math.ceil(t0 / ts) * ts; t <= tMax + 1e-9; t += ts) g.fillText(`${+t.toFixed(2)} ${spec.xUnit ?? 's'}`, X(t), h - PAD.b + 6);
+  for (let t = Math.ceil(t0 / ts) * ts; t <= tMax + 1e-9; t += ts) g.fillText(`${br(+t.toFixed(2))} ${spec.xUnit ?? 's'}`, X(t), h - PAD.b + 6);
 
   if (spec.marker !== undefined && spec.marker >= t0 && spec.marker <= tMax) {
     g.setLineDash([3, 3]);
@@ -101,10 +104,10 @@ export function drawChart(c: HTMLCanvasElement, spec: ChartSpec, cursor?: number
   g.textBaseline = 'middle';
   g.textAlign = 'left';
   g.fillStyle = ink;
-  g.font = '600 13px system-ui, sans-serif';
+  g.font = '600 13px ' + FONT;
   g.fillText(`${spec.title} (${spec.unit})`, PAD.l, 10);
   let lx = PAD.l;
-  g.font = '12px system-ui, sans-serif';
+  g.font = '12px ' + FONT;
   for (const s of spec.series) {
     const v = s.values[i];
     const label = i >= 0 ? `${s.label}: ${Math.abs(v) < 5e-3 ? '0' : +v.toPrecision(3)}` : s.label;
@@ -195,15 +198,15 @@ export function drawHeatmap(c: HTMLCanvasElement, s: HeatSpec, hover?: [number, 
     g.beginPath(); g.arc(px, py, 6, 0, 2 * Math.PI); g.stroke();
   }
 
-  g.font = '12px system-ui, sans-serif';
+  g.font = '12px ' + FONT;
   g.fillStyle = muted;
   g.textAlign = 'center';
   g.textBaseline = 'top';
-  for (const i of [0, Math.floor(s.xs.length / 2), s.xs.length - 1]) g.fillText(+s.xs[i].toPrecision(3) + '', cx(i) + cw / 2, h - HPAD.b + 4);
+  for (const i of [0, Math.floor(s.xs.length / 2), s.xs.length - 1]) g.fillText(br(s.xs[i]), cx(i) + cw / 2, h - HPAD.b + 4);
   g.fillText(s.xLabel, HPAD.l + (w - HPAD.l - HPAD.r) / 2, h - 16);
   g.textAlign = 'right';
   g.textBaseline = 'middle';
-  for (const j of [0, Math.floor(s.ys.length / 2), s.ys.length - 1]) g.fillText(+s.ys[j].toPrecision(3) + '', HPAD.l - 6, cy(j) + ch / 2);
+  for (const j of [0, Math.floor(s.ys.length / 2), s.ys.length - 1]) g.fillText(br(s.ys[j]), HPAD.l - 6, cy(j) + ch / 2);
   g.save();
   g.translate(12, HPAD.t + (h - HPAD.t - HPAD.b) / 2);
   g.rotate(-Math.PI / 2);
@@ -219,11 +222,11 @@ export function drawHeatmap(c: HTMLCanvasElement, s: HeatSpec, hover?: [number, 
   }
   g.textAlign = 'left';
   g.fillStyle = muted;
-  g.fillText(+hi.toPrecision(3) + '', lx + 16, HPAD.t + 4);
-  g.fillText(+lo.toPrecision(3) + '', lx + 16, h - HPAD.b - 4);
+  g.fillText(br(hi), lx + 16, HPAD.t + 4);
+  g.fillText(br(lo), lx + 16, h - HPAD.b - 4);
 
   g.fillStyle = ink;
-  g.font = '600 13px system-ui, sans-serif';
+  g.font = '600 13px ' + FONT;
   g.textBaseline = 'middle';
   const info = hover
     ? `${s.xLabel} ${+s.xs[hover[0]].toPrecision(4)}, ${s.yLabel} ${+s.ys[hover[1]].toPrecision(4)} → ${+s.z[hover[1]][hover[0]].toPrecision(4)} ${s.unit} (clique para aplicar)`

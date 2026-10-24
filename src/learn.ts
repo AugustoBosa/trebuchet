@@ -1,6 +1,6 @@
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
-import { css, drawChart, drawHeatmap, fitCanvas, heatCell, sizeCanvases, timeAt, type ChartSpec, type HeatSpec } from './charts';
+import { css, drawChart, FONT, drawHeatmap, fitCanvas, heatCell, sizeCanvases, timeAt, type ChartSpec, type HeatSpec } from './charts';
 import { HINTS, LABELS, RANGES } from './labels';
 import { fly } from './physics/ballistics';
 import { G } from './physics/model';
@@ -300,7 +300,7 @@ $('tl-svg').innerHTML = '<line class="th" x1="60" y1="24" x2="60" y2="336"/>' + 
     g.lineWidth = 2.5;
     g.beginPath(); air.path.forEach((q, i) => (i % 5 === 0 || i === air.path.length - 1) && (i ? g.lineTo(...P(q)) : g.moveTo(...P(q)))); g.stroke();
     g.fillStyle = css('--ink');
-    g.font = '12px system-ui, sans-serif';
+    g.font = '12px ' + FONT;
     g.textAlign = 'center';
     g.fillText(`${range.toFixed(0)} m`, P([range, 0])[0], P([0, 0])[1] + 16);
     g.fillText(`${air.range.toFixed(0)} m`, P([air.range, 0])[0], P([0, 0])[1] - 8);

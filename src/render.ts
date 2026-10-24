@@ -1,4 +1,5 @@
-import { css, fitCanvas } from './charts';
+import { css, fitCanvas, FONT } from './charts';
+import { br } from './labels';
 import { camRope } from './physics/constraints';
 import type { Mechanism, Vec } from './physics/model';
 import type { Result } from './physics/solver';
@@ -233,5 +234,6 @@ export function drawFlight(c: HTMLCanvasElement, r: Result, t: number, xMin: num
   const pos = t >= r.release.t ? flightPos(r, t) : r.release.p;
   g.beginPath(); g.arc(...P(pos), 4, 0, 2 * Math.PI); g.fill();
   g.fillStyle = css('--ink');
-  g.fillText(`${r.range.toFixed(1)} m`, P([r.range, 0])[0] - 20, P([0, 0])[1] - 6);
+  g.font = '600 12px ' + FONT;
+  g.fillText(`${br(r.range, 1)} m`, P([r.range, 0])[0] - 20, P([0, 0])[1] - 6);
 }
