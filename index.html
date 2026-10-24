@@ -72,6 +72,7 @@
     details.group[open] > summary::before { transform: rotate(45deg); }
     details.group > summary .muted { font-weight: 400; margin-left: auto; }
     #hint { color: var(--muted); font-size: 13px; min-height: 3.6em; margin: 8px 0; padding: 8px 10px; border-left: 2px solid var(--line); }
+    #params:empty ~ * { display: none; } /* first paint lands before main.ts builds the form: don't show hint/button only to shove them down (CLS) */
     fieldset { border: 0; border-top: 1px solid var(--line); padding: 10px 0 0; margin: 12px 0; min-width: 0; }
     fieldset:first-child { border-top: 0; margin-top: 4px; }
     legend { font-size: 13px; font-weight: 600; padding: 0 6px 0 0; }
