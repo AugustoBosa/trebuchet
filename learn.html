@@ -337,7 +337,7 @@ m L_s^2\,\ddot\psi + m L_1 L_s\,(c\,\ddot\theta - s\,\dot\theta^2) &= -m g L_s\c
     <section class="sec" id="tresd">
       <h2>10. Em três dimensões</h2>
       <div class="txt">
-        <p>Um trebuchet simétrico não tem nenhuma força fora do seu plano, e por isso um modelo plano basta para ele. O laboratório tem também um solver 3D (botão <b>Vista 3D</b>), escrito como generalização exata do plano. Rodado nos 13 tipos, ele reproduz o solver 2D com diferença de ~10⁻¹² no alcance, na eficiência, na força no eixo e na flexão do braço, e o desvio lateral sai exatamente zero.</p>
+        <p>Um trebuchet simétrico não tem nenhuma força fora do seu plano, e por isso um modelo plano basta para ele. O laboratório tem também um solver 3D (botão <b>Vista 3D</b>), escrito como generalização exata do plano. Rodado nos 14 tipos, ele reproduz o solver 2D com diferença de ~10⁻¹² no alcance, na eficiência, na força no eixo e na flexão do braço, e o desvio lateral sai exatamente zero.</p>
         <p>Em 3D, cada corpo ganha seis graus de liberdade. A orientação é um quatérnion, a inércia passa a ser um tensor no referencial do mundo, <span class="itex">I_w = R\,I\,R^\top</span>, e aparece o termo giroscópico:</p>
         <div class="tex">I_w\,\dot{\boldsymbol\omega} = \boldsymbol\tau - \boldsymbol\omega\times(I_w\,\boldsymbol\omega).</div>
         <p>Uma articulação vira cinco restrições: três prendem o ponto e duas mantêm os eixos alinhados. As juntas "planas" (batente, solda, tambor) medem a torção em torno do eixo da articulação. Além da comparação com o 2D, o solver passa por testes de física pura:</p>

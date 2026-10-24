@@ -758,6 +758,20 @@ for (const ev of ['focusin', 'mouseover'])
     if (f) $('hint').textContent = HINTS[f];
   });
 
+// touch screens have no hover: a tap on anything with a title shows that explanation for a few seconds
+if (matchMedia('(hover: none)').matches) {
+  let tipTimer = 0;
+  document.addEventListener('pointerdown', (e) => {
+    const text = (e.target as HTMLElement).closest<HTMLElement>('[title]')?.title;
+    if (!text) return;
+    const tip = $('tip');
+    tip.textContent = text;
+    tip.hidden = false;
+    clearTimeout(tipTimer);
+    tipTimer = window.setTimeout(() => (tip.hidden = true), 4000);
+  });
+}
+
 // --- undo / redo over whole designs (type, values, parts, break mode); the free editor keeps its own Ctrl+Z ---
 const past: Design[] = [], future: Design[] = [];
 let lastDesign: string | undefined;

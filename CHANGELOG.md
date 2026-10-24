@@ -13,7 +13,9 @@ Diagnóstico, crítica, direção e verificação em `docs/redesign/`. Direção
 - **Editor livre:** ferramentas em três grupos com legenda; "Trilho horiz./vert." no lugar de glifos que a fonte não tem.
 - **Números em pt-BR** em toda a interface e nos gráficos; ícones SVG no lugar de ⓘ ✎ ✕.
 - **Celular:** título e tipo no topo, página 35 % mais curta.
-- `learn.html`: "14 modelos" (estava 13).
+- **Toque:** um toque em qualquer controle com explicação (`title`) mostra a explicação por 4 s; antes ela só existia no hover.
+- **Ajuda do otimizador** dentro da aba (seção recolhível), não mais num diálogo.
+- `learn.html`: "14 modelos" e "14 tipos" na paridade 3D (o teste já cobre os 14).
 
 ## 2026-10-23: validação do articulado contra um trebuchet instrumentado (`test/horsdal.test.ts`)
 

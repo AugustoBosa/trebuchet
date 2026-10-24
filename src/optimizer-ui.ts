@@ -65,7 +65,6 @@ export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p:
     syncArm();
   });
   $('opt-arm-total').addEventListener('input', () => (armDirty = true));
-  $('opt-help-btn').addEventListener('click', () => $<HTMLDialogElement>('opt-help').showModal());
 
   const stopAll = () => (pool.forEach((w) => w.terminate()), (pool = []));
 

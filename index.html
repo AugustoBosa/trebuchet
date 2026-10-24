@@ -179,11 +179,13 @@
     dialog::backdrop { background: rgb(0 0 0 / .45); }
     dialog h2 { font-size: 18px; margin: 0 0 8px; }
     #info { font-size: 15px; line-height: 1.55; max-width: 65ch; }
-    #opt-help { max-width: min(700px, calc(100vw - 32px)); line-height: 1.55; font-size: 14px; }
-    #opt-help h3 { font-size: 15px; margin: 18px 0 4px; }
+    #opt-help { line-height: 1.5; font-size: 13px; margin-top: 4px; }
+    #opt-help[open] { padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+    #opt-help h3 { font-size: 13px; margin: 14px 0 2px; }
     #opt-help ol, #opt-help ul { padding-left: 20px; margin: 4px 0; }
     #opt-help li { margin: 6px 0; }
     #opt-help li ul { font-size: 13px; color: var(--muted); }
+    #tip { position: fixed; left: 12px; right: 12px; bottom: 120px; z-index: 10; margin: 0; padding: 10px 12px; background: var(--ink); color: var(--bg); border-radius: 8px; font-size: 13px; box-shadow: 0 8px 24px rgb(0 0 0 / .25); }
     .close { float: right; padding: 6px; line-height: 0; }
 
     @media (max-width: 1100px) {
@@ -262,45 +264,8 @@
           </div>
         </div>
         <div role="tabpanel" id="pane-opt" aria-labelledby="tab-opt" hidden>
-          <fieldset id="opt" aria-label="Otimizar">
-            <div class="row"><button type="button" class="ghost" id="opt-help-btn" aria-haspopup="dialog"><svg class="ico"><use href="#i-info"/></svg> Como usar</button></div>
-            <label>Objetivo<select id="objective"><option value="range">Alcance</option><option value="efficiency">Eficiência</option><option value="target">Distância-alvo</option><option value="lateral">Desvio lateral mínimo (3D)</option><option value="robust">Alcance robusto (3D)</option></select></label>
-            <label>Teto de força na funda, kN (opcional)<input type="number" id="opt-slingcap" min="0" step="0.5" placeholder="sem teto" title="A funda carrega a força que acelera o projétil: com um teto, o otimizador procura o maior alcance que não passa disso (projétil frágil)"></label>
-            <label id="opt-target-box">Distância-alvo (m), para o objetivo de mesmo nome e para o contrapeso mínimo<input type="number" id="opt-target" value="100" min="1" step="1"></label>
-            <p class="muted">Variáveis livres para o otimizador:</p>
-            <div id="opt-vars"></div>
-            <div id="opt-arm-box">
-              <label class="chk"><input type="checkbox" id="opt-arm"> Distribuir o braço entre longo e curto</label>
-              <label>Comprimento total do braço (m)<input type="number" id="opt-arm-total" step="0.05" min="0.3" max="27" disabled aria-describedby="opt-arm-hint"></label>
-              <p class="muted" id="opt-arm-hint"></p>
-            </div>
-            <div id="opt-struct-box">
-              <label class="chk"><input type="checkbox" id="opt-struct"> As peças não podem quebrar</label>
-              <div class="row">
-                <select id="opt-struct-mode" aria-label="Critério de quebra do otimizador"><option value="rupture">critério de ruptura</option><option value="design">critério de projeto (NBR)</option></select>
-                <label>FS mínimo<input type="number" id="opt-fs" value="1" min="1" max="10" step="0.1"></label>
-              </div>
-              <label>Material e seção do braço<select id="opt-mat"><option value="">os da ficha do braço</option><option value="all">varrer todos os materiais e bitolas comerciais</option><option value="wood">varrer só madeiras</option><option value="metal">varrer só metais</option></select></label>
-              <label>Bitolas otimizadas por material<input type="number" id="opt-keep" value="2" min="1" max="6" step="1"></label>
-              <p class="muted">Com uma peça disponível de comprimento fixo, marque também "Distribuir o braço" acima e digite o comprimento dela. Na varredura, cada material × bitola ganha uma otimização própria, e a massa do braço passa a ser ρ·A·L.</p>
-            </div>
-            <div class="row"><button type="button" id="opt-run">Otimizar</button><button type="button" class="ghost" id="opt-stop" hidden>Parar</button></div>
-            <div class="row"><button type="button" class="ghost" id="opt-mincw" title="Com o resto do design como está, acha o menor contrapeso cujo tiro chega à distância-alvo">Contrapeso mínimo para o alvo</button><button type="button" class="ghost" id="opt-pareto" title="Otimiza o alcance sob tetos cada vez menores para a força de pico no eixo e mostra o preço do alcance extra">Fronteira alcance × força no eixo</button></div>
-            <progress id="opt-progress" max="1" value="0" hidden aria-label="Progresso da otimização"></progress>
-            <p id="opt-status" class="muted" role="status" aria-live="polite"></p>
-            <div id="opt-result"></div>
-          </fieldset>
-          <fieldset>
-            <legend>Varredura</legend>
-            <label>Eixo X<select id="sw-x"></select></label>
-            <label>Eixo Y<select id="sw-y"></select></label>
-            <label class="chk"><input type="checkbox" id="sw-whatif"> Comparar com o melhor caso (curva 1D): reotimiza o ângulo de soltura em cada ponto</label>
-            <div class="row"><button type="button" class="ghost" id="sw-run">Varrer</button></div>
-          </fieldset>
-        <dialog id="opt-help" aria-labelledby="opt-help-title">
-          <form method="dialog">
-            <button class="ghost close" aria-label="Fechar"><svg class="ico"><use href="#i-x"/></svg></button>
-            <h2 id="opt-help-title">Como usar o otimizador</h2>
+          <details id="opt-help" class="group">
+            <summary>Como usar o otimizador</summary>
             <h3>O que ele faz</h3>
             <p>Procura, entre as variáveis que você liberar, os valores que dão o maior <b>alcance</b> ou a maior <b>eficiência</b> (parte da energia do contrapeso que chega ao projétil). Cada tentativa é uma simulação completa do disparo. A busca usa o método Nelder–Mead, que só compara resultados, a partir de <b>8 pontos de partida em paralelo</b>: o seu design atual e 7 pontos espalhados pela faixa permitida. Tudo o que você não liberar continua fixo no valor atual.</p>
             <h3>Passo a passo</h3>
@@ -338,9 +303,41 @@
             <h3>Sem quebrar</h3>
             <p>Marque <b>As peças não podem quebrar</b> para o otimizador respeitar os materiais das fichas das peças: escolha o critério (ruptura, com valores médios, ou projeto, pela NBR) e o FS mínimo. Um design que quebraria perde pontos em proporção a quanto passa do limite, então a busca para na borda do que aguenta. Com uma seção definida, a massa do braço vira ρ·A·L e acompanha o comprimento.</p>
             <p><b>Uma peça disponível</b> (material X, comprimento Y): marque <b>Distribuir o braço</b> com o comprimento total Y e escolha o material e a bitola na ficha do braço. Para o otimizador escolher também o material, use <b>Material e seção do braço → varrer</b>. Ele faz uma triagem de cada material × bitola comercial com um disparo, otimiza a bitola mais leve que aguenta em cada material e a logo abaixo dela, e lista as melhores. "Aplicar" leva o material, a seção, as medidas e o critério de quebra para o design.</p>
-            <button class="ghost">Fechar</button>
-          </form>
-        </dialog>
+          </details>
+          <fieldset id="opt" aria-label="Otimizar">
+            <label>Objetivo<select id="objective"><option value="range">Alcance</option><option value="efficiency">Eficiência</option><option value="target">Distância-alvo</option><option value="lateral">Desvio lateral mínimo (3D)</option><option value="robust">Alcance robusto (3D)</option></select></label>
+            <label>Teto de força na funda, kN (opcional)<input type="number" id="opt-slingcap" min="0" step="0.5" placeholder="sem teto" title="A funda carrega a força que acelera o projétil: com um teto, o otimizador procura o maior alcance que não passa disso (projétil frágil)"></label>
+            <label id="opt-target-box">Distância-alvo (m), para o objetivo de mesmo nome e para o contrapeso mínimo<input type="number" id="opt-target" value="100" min="1" step="1"></label>
+            <p class="muted">Variáveis livres para o otimizador:</p>
+            <div id="opt-vars"></div>
+            <div id="opt-arm-box">
+              <label class="chk"><input type="checkbox" id="opt-arm"> Distribuir o braço entre longo e curto</label>
+              <label>Comprimento total do braço (m)<input type="number" id="opt-arm-total" step="0.05" min="0.3" max="27" disabled aria-describedby="opt-arm-hint"></label>
+              <p class="muted" id="opt-arm-hint"></p>
+            </div>
+            <div id="opt-struct-box">
+              <label class="chk"><input type="checkbox" id="opt-struct"> As peças não podem quebrar</label>
+              <div class="row">
+                <select id="opt-struct-mode" aria-label="Critério de quebra do otimizador"><option value="rupture">critério de ruptura</option><option value="design">critério de projeto (NBR)</option></select>
+                <label>FS mínimo<input type="number" id="opt-fs" value="1" min="1" max="10" step="0.1"></label>
+              </div>
+              <label>Material e seção do braço<select id="opt-mat"><option value="">os da ficha do braço</option><option value="all">varrer todos os materiais e bitolas comerciais</option><option value="wood">varrer só madeiras</option><option value="metal">varrer só metais</option></select></label>
+              <label>Bitolas otimizadas por material<input type="number" id="opt-keep" value="2" min="1" max="6" step="1"></label>
+              <p class="muted">Com uma peça disponível de comprimento fixo, marque também "Distribuir o braço" acima e digite o comprimento dela. Na varredura, cada material × bitola ganha uma otimização própria, e a massa do braço passa a ser ρ·A·L.</p>
+            </div>
+            <div class="row"><button type="button" id="opt-run">Otimizar</button><button type="button" class="ghost" id="opt-stop" hidden>Parar</button></div>
+            <div class="row"><button type="button" class="ghost" id="opt-mincw" title="Com o resto do design como está, acha o menor contrapeso cujo tiro chega à distância-alvo">Contrapeso mínimo para o alvo</button><button type="button" class="ghost" id="opt-pareto" title="Otimiza o alcance sob tetos cada vez menores para a força de pico no eixo e mostra o preço do alcance extra">Fronteira alcance × força no eixo</button></div>
+            <progress id="opt-progress" max="1" value="0" hidden aria-label="Progresso da otimização"></progress>
+            <p id="opt-status" class="muted" role="status" aria-live="polite"></p>
+            <div id="opt-result"></div>
+          </fieldset>
+          <fieldset>
+            <legend>Varredura</legend>
+            <label>Eixo X<select id="sw-x"></select></label>
+            <label>Eixo Y<select id="sw-y"></select></label>
+            <label class="chk"><input type="checkbox" id="sw-whatif"> Comparar com o melhor caso (curva 1D): reotimiza o ângulo de soltura em cada ponto</label>
+            <div class="row"><button type="button" class="ghost" id="sw-run">Varrer</button></div>
+          </fieldset>
         </div>
         <div role="tabpanel" id="pane-des" aria-labelledby="tab-des" hidden>
           <fieldset>
@@ -426,6 +423,7 @@
       <canvas id="flight" role="img" aria-label="Trajetória do projétil no voo" height="200"></canvas>
     </section>
   </main>
+  <p id="tip" role="status" aria-live="polite" hidden></p>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>
