@@ -3,200 +3,269 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="theme-color" content="#1d1a16" media="(prefers-color-scheme: dark)" />
-  <meta name="theme-color" content="#f4efe4" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#1a1d21" media="(prefers-color-scheme: dark)" />
+  <meta name="theme-color" content="#ecebe6" media="(prefers-color-scheme: light)" />
   <title>Laboratório de Trebuchets</title>
+  <meta name="description" content="Simule, meça e otimize 14 tipos de trebuchet: física validada, gráficos do disparo, vista 3D e verificação estrutural." />
+  <link rel="stylesheet" href="/src/theme.css" />
   <style>
-    :root {
-      color-scheme: light dark; /* native controls (select popups, scrollbars) follow the theme */
-      --bg: #f4efe4; --ink: #2b2620; --muted: #6b6052; --accent: #a0412d; --line: #d8cdb8; --field: #8c8070;
-      --series-1: #2a78d6; --series-2: #d4521f; --series-3: #0f8a5f; --danger: #c62828; --on-accent: #fff;
-    }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg: #1d1a16; --ink: #ece4d4; --muted: #a39887; --accent: #e07a5f; --line: #3a342c; --field: #7f7565;
-        --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --danger: #ff6b6b; --on-accent: #1d1a16;
-      }
-    }
     * { box-sizing: border-box; }
-    body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.4 system-ui, sans-serif; }
-    main { display: grid; grid-template-columns: 300px 1fr; gap: 16px; padding: 16px; max-width: 1400px; margin: auto; }
-    @media (max-width: 800px) {
-      main { grid-template-columns: 1fr; }
-      /* machine + results above the long control panel; charts after it */
-      section { display: contents; }
-      section > * { order: 1; }
-      #view-row, #stage, #stats { order: -1; }
-    }
-    main > * { min-width: 0; }
-    h1 { font-size: 20px; margin: 0 0 12px; text-wrap: balance; }
-    h2 { font-size: 15px; margin: 0 0 6px; }
-    label { display: grid; grid-template-columns: 1fr 80px; gap: 2px 8px; align-items: center; margin: 6px 0; font-size: 13px; }
-    label input[type=range] { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); margin: 0; }
-    input[type=number], input[type=text] { width: 100%; padding: 4px; background: transparent; color: var(--ink); border: 1px solid var(--field); border-radius: 4px; font: inherit; }
-    button, select { padding: 7px 12px; border: 0; border-radius: 6px; background: var(--accent); color: var(--on-accent); font: 600 13px system-ui, sans-serif; cursor: pointer; }
-    select, button.ghost, .file { background: transparent; color: var(--ink); border: 1px solid var(--field); }
-    button:hover, .file:hover { filter: brightness(1.12); }
-    button.ghost:hover, select:hover, .file:hover { filter: none; background: color-mix(in srgb, var(--ink) 8%, transparent); }
-    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    body { margin: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100dvh; background: var(--bg); color: var(--ink); font: 15px/1.45 var(--font-ui); font-variant-numeric: tabular-nums; }
+    h1, h2, h3 { text-wrap: balance; }
+    h2 { font-size: 13px; font-weight: 600; letter-spacing: .02em; margin: 0 0 8px; }
+
+    /* --- shell: header, sidebar and work area; each scrolls on its own so the machine never leaves the screen --- */
+    .top { display: flex; align-items: center; gap: 12px; padding: 8px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
+    .top h1 { font-size: 17px; font-weight: 700; letter-spacing: -.01em; margin: 0; white-space: nowrap; }
+    .top h1 small { font-weight: 400; color: var(--muted); }
+    .top .kind { display: flex; gap: 6px; align-items: center; min-width: 0; flex: 0 1 340px; }
+    #kind { flex: 1; min-width: 0; font-size: 15px; font-weight: 600; }
+    .top nav { margin-left: auto; font-size: 14px; white-space: nowrap; }
+    main { display: grid; grid-template-columns: 360px minmax(0, 1fr); min-height: 0; }
+    /* the optimizer's tables need room: its tab widens the sidebar */
+    main:has(#tab-opt[aria-selected=true]) { grid-template-columns: 480px minmax(0, 1fr); }
+    #side { display: flex; flex-direction: column; min-height: 0; background: var(--panel); border-right: 1px solid var(--line); }
+    #work { overflow: auto; padding: 16px 20px 32px; min-width: 0; }
+    #work > * { max-width: 1100px; }
+
+    /* --- sidebar tabs --- */
+    [role=tablist] { display: flex; border-bottom: 1px solid var(--line); padding: 0 12px; flex: none; }
+    [role=tab] { flex: 1; background: none; color: var(--muted); border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: 10px 4px 8px; font-weight: 600; margin-bottom: -1px; }
+    [role=tab]:hover { color: var(--ink); background: none; }
+    [role=tab][aria-selected=true] { color: var(--ink); border-bottom-color: var(--accent); }
+    [role=tab]:disabled { opacity: .4; cursor: not-allowed; }
+    .panes { flex: 1; overflow: auto; overscroll-behavior: contain; padding: 4px 16px 16px; }
+    .foot { flex: none; border-top: 1px solid var(--line); padding: 10px 16px; background: var(--panel); }
+    .foot .row { margin: 0; }
+    #run { flex: 1; font-size: 15px; padding: 9px 14px; }
+    .icon-btn { padding: 7px; line-height: 0; }
+
+    /* --- controls --- */
+    label { display: grid; grid-template-columns: minmax(0, 1fr) 84px; gap: 2px 8px; align-items: center; margin: 4px 0; font-size: 13px; }
+    label input[type=range] { grid-column: 1 / -1; width: 100%; margin: 0; height: 18px; }
+    input[type=number], input[type=text] { width: 100%; padding: 4px 6px; background: var(--bg); color: var(--ink); border: 1px solid var(--field); border-radius: var(--r); font: inherit; text-align: right; }
+    input[type=text] { text-align: left; }
+    input:disabled { opacity: .5; }
+    button, select, .file { padding: 7px 12px; border: 1px solid transparent; border-radius: var(--r); background: var(--accent); color: var(--on-accent); font: 600 13px var(--font-ui); cursor: pointer; transition: background-color .15s var(--ease), color .15s var(--ease), border-color .15s var(--ease); }
+    select, button.ghost, .file { background: transparent; color: var(--ink); border-color: var(--field); }
+    button:hover { background: color-mix(in srgb, var(--accent) 88%, var(--ink)); }
+    button.ghost:hover, select:hover, .file:hover { background: color-mix(in srgb, var(--ink) 7%, transparent); }
+    button:active { transform: translateY(1px); }
+    button:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+    button[aria-busy=true] { cursor: progress; }
+    option { background: var(--raised); color: var(--ink); }
+    .file { display: inline-block; position: relative; margin: 0; }
     .file:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
     .file input { position: absolute; opacity: 0; width: 1px; height: 1px; }
-    option { background: var(--bg); color: var(--ink); }
-    .file { display: inline-block; padding: 7px 12px; border-radius: 6px; font: 600 13px system-ui, sans-serif; cursor: pointer; margin: 0; }
-    .file { position: relative; }
     .row { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; align-items: center; }
-    canvas { width: 100%; display: block; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 12px; }
-    #stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin: 0 0 12px; }
-    .stat { border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
-    .stat b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; }
-    .stat span { color: var(--muted); font-size: 12px; }
-    .stat small { display: block; color: var(--muted); font-size: 12px; font-weight: 400; }
-    #err { color: var(--accent); font-weight: 600; }
-    #kind { width: 100%; font-size: 15px; }
-    #info, #hint { color: var(--muted); font-size: 13px; }
-    #info { color: var(--ink); font-size: 14px; line-height: 1.5; }
-    dialog { max-width: min(520px, calc(100vw - 32px)); max-height: 80vh; overflow: auto; overscroll-behavior: contain; background: var(--bg); color: var(--ink); border: 1px solid var(--field); border-radius: 10px; padding: 16px 20px; }
-    dialog::backdrop { background: rgb(0 0 0 / .5); }
-    dialog h2 { font-size: 17px; margin: 0 0 8px; }
-    #hint { min-height: 3em; }
-    #physics { border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; }
-    #physics:empty { display: none; }
-    #physics ul { margin: 0; padding-left: 18px; }
-    .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 0 12px; }
-    fieldset { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; margin: 12px 0; }
-    legend { font-size: 12px; color: var(--muted); }
-    button, select, input { touch-action: manipulation; }
-    aside .row:has(#run) { position: sticky; bottom: 0; background: var(--bg); padding: 8px 0; margin: 0; z-index: 1; }
-    [hidden] { display: none !important; }
     .muted { color: var(--muted); font-size: 13px; }
+    [hidden] { display: none !important; }
+    #err { color: var(--danger); font-weight: 600; font-size: 13px; margin: 6px 0 0; }
+    #err:empty { display: none; }
+
+    /* parameter groups: rules between them, environment folded away */
+    .group { border-top: 1px solid var(--line); padding: 10px 0 6px; }
+    .group:first-child { border-top: 0; }
+    details.group > summary { cursor: pointer; font-size: 13px; font-weight: 600; list-style: none; display: flex; align-items: center; gap: 6px; }
+    details.group > summary::-webkit-details-marker { display: none; }
+    details.group > summary::before, .g3-toggle::after { content: ''; width: 6px; height: 6px; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: rotate(-45deg); transition: transform .15s var(--ease); }
+    details.group[open] > summary::before { transform: rotate(45deg); }
+    details.group > summary .muted { font-weight: 400; margin-left: auto; }
+    #hint { color: var(--muted); font-size: 13px; min-height: 3.6em; margin: 8px 0; padding: 8px 10px; border-left: 2px solid var(--line); }
+    fieldset { border: 0; border-top: 1px solid var(--line); padding: 10px 0 0; margin: 12px 0; min-width: 0; }
+    fieldset:first-child { border-top: 0; margin-top: 4px; }
+    legend { font-size: 13px; font-weight: 600; padding: 0 6px 0 0; }
+
+    /* --- work area --- */
+    #view-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0 0 10px; }
+    #view3d[aria-pressed=true], #tools3d button.on, #tools button.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+    canvas { width: 100%; display: block; }
+    #stage { position: relative; border: 1px solid var(--line); background: var(--raised); }
+    #machine[data-mode], #machine3d { touch-action: none; }
+    #machine[data-mode=edit] { cursor: crosshair; }
+    #machine[data-mode=handles] { cursor: grab; }
+
+    /* results: a drawing's title block, cells sharing their rules; range and efficiency carry the weight */
+    #stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--line); border-top: 0; margin: 0 0 20px; }
+    #stats:empty { min-height: 196px; border: 0; } /* holds the results' place until the first shot: no layout shift */
+    .stat { padding: 8px 12px 10px; border-right: 1px solid var(--line); border-top: 1px solid var(--line); min-width: 0; }
+    .stat:nth-child(4n+2) { border-right: 0; }
+    .stat span { display: block; color: var(--muted); font-size: 12px; }
+    .stat b { display: block; font-size: 18px; font-weight: 600; letter-spacing: -.01em; }
+    .stat.key { grid-column: span 2; }
+    .stat.key b { font-size: 34px; font-weight: 700; line-height: 1.1; letter-spacing: -.02em; }
+    .stat small { display: block; color: var(--muted); font-size: 12px; font-weight: 400; letter-spacing: 0; }
+    .stat .delta { display: inline-block; font-size: 13px; font-weight: 600; margin-left: 8px; letter-spacing: 0; color: var(--muted); }
+    .stat .delta.up { color: var(--ok); }
+    .stat .delta.down { color: var(--danger); }
+    #broke { color: var(--danger); font-weight: 600; background: color-mix(in srgb, var(--danger) 8%, transparent); padding: 8px 12px; margin: 0 0 12px; }
+
+    #physics { margin: 0 0 20px; font-size: 14px; }
+    #physics:empty { display: none; }
+    #physics h2, .charts-head { font-size: 13px; border-bottom: 1px solid var(--ink); padding-bottom: 4px; margin: 20px 0 8px; }
+    #physics ul { margin: 0; padding: 0; list-style: none; }
+    #physics li { padding: 4px 0; border-bottom: 1px solid var(--line); }
+    #physics .muted { margin: 6px 0 0; }
+    table.fs { border-collapse: collapse; width: 100%; font-size: 13px; }
+    table.fs th { text-align: left; font-weight: 600; color: var(--muted); }
+    table.fs th, table.fs td { text-align: left; padding: 4px 8px 4px 0; border-bottom: 1px solid var(--line); }
+    table.fs td.n, table.fs th:nth-child(n+3) { text-align: right; white-space: nowrap; }
+    table.fs .fail { color: var(--danger); font-weight: 600; }
+    table.fs .on { background: var(--accent-soft); }
+    .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 0 20px; }
+    .charts canvas, #flight, #sweep { margin-bottom: 16px; }
+    #data-table { margin: 0 0 16px; font-size: 13px; }
+    #data-table summary { cursor: pointer; color: var(--muted); padding: 4px 0; }
+    #data-table .scroll { max-height: 260px; overflow: auto; border: 1px solid var(--line); }
+    #data-table table { width: 100%; border-collapse: collapse; }
+    #data-table th, #data-table td { padding: 2px 8px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+    #data-table thead th { position: sticky; top: 0; background: var(--bg); }
+
     /* part card (BIM-style inspector): floats over the drawing's corner; under it on phones */
-    #stage { position: relative; }
-    #inspector { position: absolute; top: 8px; right: 8px; width: min(330px, 48%); max-height: calc(100% - 28px); overflow: auto; overscroll-behavior: contain; background: var(--bg); border: 1px solid var(--field); border-radius: 10px; padding: 10px 12px; box-shadow: 0 6px 20px rgb(0 0 0 / .2); font-size: 13px; z-index: 2; }
+    #inspector { position: absolute; top: 8px; right: 8px; width: min(340px, 48%); max-height: calc(100% - 16px); overflow: auto; overscroll-behavior: contain; background: var(--raised); border: 1px solid var(--field); border-radius: 8px; padding: 10px 12px; box-shadow: 0 8px 24px rgb(0 0 0 / .18); font-size: 13px; z-index: 2; }
     #inspector header { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
     #inspector header select { flex: 1; min-width: 0; font-weight: 700; }
-    #inspector header button { padding: 4px 10px; }
-    #inspector .r { display: grid; grid-template-columns: minmax(0, 1fr) 150px; gap: 2px 8px; align-items: center; margin: 5px 0; }
+    #inspector header button { padding: 6px; line-height: 0; }
+    #inspector .r { display: grid; grid-template-columns: minmax(0, 1fr) 150px; gap: 2px 8px; align-items: center; padding: 4px 0; border-bottom: 1px solid var(--line); }
     #inspector .r > span:first-child { color: var(--muted); }
-    #inspector .r b { font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+    #inspector .r b { font-weight: 600; text-align: right; }
     #inspector .r small { grid-column: 1 / -1; color: var(--muted); font-size: 12px; }
     #inspector .r .unit { display: flex; gap: 4px; align-items: center; }
     #inspector .r select { width: 100%; padding: 4px 6px; }
-    #inspector .ok b { color: var(--series-3); }
+    #inspector .ok b { color: var(--ok); }
     #inspector .warn b { color: var(--series-2); }
     #inspector .fail b { color: var(--danger); }
-    #broke { color: var(--danger); font-weight: 600; border-left: 3px solid var(--danger); padding: 6px 10px; margin: 8px 0; }
-    table.fs { border-collapse: collapse; width: 100%; font-size: 0.9em; }
-    table.fs th, table.fs td { text-align: left; padding: 3px 6px; border-bottom: 1px solid var(--line); }
-    table.fs td.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-    table.fs .fail { color: var(--danger); font-weight: 600; }
-    table.fs .on { outline: 2px solid var(--accent); outline-offset: -2px; }
     #inspector .note { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
-    @media (max-width: 800px) { #inspector { position: static; width: auto; max-height: none; box-shadow: none; margin: 0 0 12px; } }
-    #tools { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+
+    /* free editor: tools in groups with a visible caption */
+    #tools { display: grid; gap: 8px; margin: 8px 0; }
+    #tools .tg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+    #tools .tg > span { grid-column: 1 / -1; font-size: 12px; color: var(--muted); }
     #tools button { padding: 6px 4px; }
-    #tools button.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+    #free-status { min-height: 2.8em; border-left: 2px solid var(--line); padding: 4px 10px; }
     #free-props label { grid-template-columns: 1fr 110px; }
     #free-props input[type=text], #free-props select { width: 100%; }
-    #opt label { grid-template-columns: 1fr 130px; }
+
+    /* optimizer */
+    #pane-opt label { grid-template-columns: minmax(0, 1fr); gap: 4px; margin: 8px 0; }
+    #pane-opt .row label { grid-template-columns: auto 72px; margin: 0; }
+    #pane-opt label, #pane-opt label select { min-width: 0; }
+    #opt label.chk, .chk { display: flex; gap: 8px; font-size: 13px; }
     #opt-vars { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; font-size: 12px; }
     #opt-vars label { display: flex; gap: 6px; margin: 0; }
-    #opt-result table { width: 100%; font-size: 12px; border-collapse: collapse; font-variant-numeric: tabular-nums; }
-    #opt-result td, #opt-result th { padding: 2px 4px; text-align: right; border-bottom: 1px solid var(--line); }
+    #opt-arm-box, #opt-struct-box { margin: 10px 0; padding-top: 8px; border-top: 1px solid var(--line); }
+    #opt-progress { width: 100%; height: 4px; appearance: none; border: 0; background: var(--line); display: block; margin: 6px 0 0; }
+    #opt-progress::-webkit-progress-bar { background: var(--line); }
+    #opt-progress::-webkit-progress-value { background: var(--accent); transition: width .2s var(--ease); }
+    #opt-progress::-moz-progress-bar { background: var(--accent); }
+    #opt-result { overflow-x: auto; }
+    #opt-result table { width: 100%; font-size: 12px; border-collapse: collapse; }
+    #opt-result td, #opt-result th { padding: 4px; text-align: right; border-bottom: 1px solid var(--line); }
+    #opt-result th { color: var(--muted); font-weight: 600; vertical-align: bottom; }
+    #opt-result td { white-space: nowrap; }
     #opt-result td:first-child, #opt-result th:first-child { text-align: left; }
+    #opt-result button { padding: 4px 8px; }
     #sweep { cursor: pointer; }
-    #machine[data-mode], #machine3d { touch-action: none; }
-    #view-row { align-items: center; flex-wrap: wrap; }
-    #opts3d { display: flex; gap: 12px; flex-wrap: wrap; }
-    #opts3d[hidden] { display: none; }
+
+    /* 3D controls */
+    #opts3d { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
     #opts3d label { grid-template-columns: auto 64px; margin: 0; }
     #tools3d, .g3 { display: contents; }
-    #tools3d[hidden] { display: none; }
     .g3-toggle { display: none; }
-    .g3-toggle::after { content: ' ▾'; }
-    .g3-toggle[aria-expanded=true]::after { content: ' ▴'; }
+    .g3-toggle::after { display: inline-block; margin-left: 8px; transform: rotate(45deg) translateY(-3px); }
+    .g3-toggle[aria-expanded=true]::after { transform: rotate(-135deg) translate(-2px, -1px); }
+
+    dialog { max-width: min(560px, calc(100vw - 32px)); max-height: 80vh; overflow: auto; overscroll-behavior: contain; background: var(--raised); color: var(--ink); border: 1px solid var(--field); border-radius: 10px; padding: 18px 22px; box-shadow: 0 16px 48px rgb(0 0 0 / .25); }
+    dialog::backdrop { background: rgb(0 0 0 / .45); }
+    dialog h2 { font-size: 18px; margin: 0 0 8px; }
+    #info { font-size: 15px; line-height: 1.55; max-width: 65ch; }
+    #opt-help { line-height: 1.5; font-size: 13px; margin-top: 4px; }
+    #opt-help[open] { padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+    #opt-help h3 { font-size: 13px; margin: 14px 0 2px; }
+    #opt-help ol, #opt-help ul { padding-left: 20px; margin: 4px 0; }
+    #opt-help li { margin: 6px 0; }
+    #opt-help li ul { font-size: 13px; color: var(--muted); }
+    #tip { position: fixed; left: 12px; right: 12px; bottom: 120px; z-index: 10; margin: 0; padding: 10px 12px; background: var(--ink); color: var(--bg); border-radius: 8px; font-size: 13px; box-shadow: 0 8px 24px rgb(0 0 0 / .25); }
+    .close { float: right; padding: 6px; line-height: 0; }
+
+    @media (max-width: 1100px) {
+      main { grid-template-columns: 320px minmax(0, 1fr); }
+      main:has(#tab-opt[aria-selected=true]) { grid-template-columns: 420px minmax(0, 1fr); }
+      #stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .stat.key { grid-column: span 1; }
+      .stat:nth-child(2n) { border-right: 0; }
+      .stat.key b { font-size: 28px; }
+    }
     @media (max-width: 800px) {
-      /* phones: each group of 3D controls folds behind its own button */
+      /* phones: header, machine and results first, then the controls, then the analysis */
+      .top { flex-wrap: wrap; padding: 8px 12px; }
+      .top .kind { flex: 1 1 100%; order: 2; }
+      body { display: block; height: auto; }
+      main { display: flex; flex-direction: column; }
+      #work { display: contents; }
+      #work > * { order: 2; margin-left: 12px; margin-right: 12px; }
+      #view-row, #stage, #broke, #stats { order: 0; }
+      #view-row { margin-top: 10px; }
+      #side { order: 1; border: 0; border-top: 1px solid var(--line); margin-bottom: 16px; }
+      .panes { overflow: visible; }
+      .foot { position: sticky; bottom: 0; z-index: 3; box-shadow: 0 -6px 16px rgb(0 0 0 / .08); }
+      #stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .stat.key b { font-size: 26px; }
+      #inspector { position: static; width: auto; max-height: none; box-shadow: none; margin: 0 0 12px; border-radius: 0; }
       .g3-toggle { display: inline-block; }
       .g3 { display: none; }
       .g3.open { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; width: 100%; }
     }
-    #tools3d button.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
-    #view3d[aria-pressed=true] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
-    #machine[data-mode=edit] { cursor: crosshair; }
-    #machine[data-mode=handles] { cursor: grab; }
-    #data-table { margin: 0 0 12px; font-size: 13px; }
-    #data-table summary { cursor: pointer; color: var(--muted); padding: 4px 0; }
-    #data-table .scroll { max-height: 260px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
-    #data-table table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
-    #data-table th, #data-table td { padding: 2px 8px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
-    #data-table thead th { position: sticky; top: 0; background: var(--bg); }
-    #opt label, #opt label select { min-width: 0; }
-    #opt label.chk { display: flex; gap: 6px; font-size: 12px; }
-    #opt-arm-box, #opt-struct-box { margin: 8px 0; padding-top: 6px; border-top: 1px solid var(--line); }
-    #opt-help { max-width: min(680px, calc(100vw - 32px)); line-height: 1.5; font-size: 14px; }
-    #opt-help h3 { font-size: 15px; margin: 16px 0 4px; }
-    #opt-help ol, #opt-help ul { padding-left: 20px; margin: 4px 0; }
-    #opt-help li { margin: 6px 0; }
-    #opt-help li ul { font-size: 13px; color: var(--muted); }
     @media (pointer: coarse) {
       button, select, .file, input[type=number], input[type=text] { min-height: 44px; }
       input[type=range] { min-height: 32px; }
       #opt-vars label { min-height: 36px; }
       #opt-vars input { width: 20px; height: 20px; }
     }
-    @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; } }
   </style>
 </head>
 <body>
-  <main>
-    <aside>
-      <h1>Laboratório de Trebuchets</h1>
-      <p><a href="./learn.html" style="color: var(--accent)">Aprenda a física por trás →</a></p>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-info" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 7.2V11.5M8 4.6v.1"/></symbol>
+    <symbol id="i-x" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></symbol>
+    <symbol id="i-undo" viewBox="0 0 16 16"><path d="M5.5 3.5L2.5 6.5l3 3"/><path d="M2.5 6.5h7a4 4 0 010 8H7"/></symbol>
+    <symbol id="i-redo" viewBox="0 0 16 16"><path d="M10.5 3.5l3 3-3 3"/><path d="M13.5 6.5h-7a4 4 0 000 8H9"/></symbol>
+  </svg>
+  <header class="top">
+    <h1>Laboratório de Trebuchets</h1>
+    <div class="kind">
       <select id="kind" aria-label="Tipo de trebuchet"></select>
-      <div class="row"><button type="button" class="ghost" id="info-btn" aria-haspopup="dialog">ⓘ Sobre este tipo</button></div>
-      <dialog id="info-dlg" aria-labelledby="info-title">
-        <form method="dialog"><h2 id="info-title"></h2><p id="info"></p><button class="ghost">Fechar</button></form>
-      </dialog>
-      <div id="preset-panel">
-        <form id="params" onsubmit="return false"></form>
-        <p id="hint">Passe o mouse ou clique num parâmetro para ver por que ele importa.</p>
-        <button class="ghost" id="to-free">Copiar para o editor livre</button>
-        <fieldset id="opt">
-          <legend>Otimizar</legend>
-          <div class="row"><button type="button" class="ghost" id="opt-help-btn" aria-haspopup="dialog">ⓘ Como usar</button></div>
-          <label>Objetivo<select id="objective"><option value="range">Alcance</option><option value="efficiency">Eficiência</option><option value="target">Distância-alvo</option><option value="lateral">Desvio lateral mínimo (3D)</option><option value="robust">Alcance robusto (3D)</option></select></label>
-          <label>Teto de força na funda, kN (opcional)<input type="number" id="opt-slingcap" min="0" step="0.5" placeholder="sem teto" title="A funda carrega a força que acelera o projétil: com um teto, o otimizador procura o maior alcance que não passa disso (projétil frágil)"></label>
-          <label id="opt-target-box">Distância-alvo (m), para o objetivo de mesmo nome e para o contrapeso mínimo<input type="number" id="opt-target" value="100" min="1" step="1"></label>
-          <p class="muted">Variáveis livres para o otimizador:</p>
-          <div id="opt-vars"></div>
-          <div id="opt-arm-box">
-            <label class="chk"><input type="checkbox" id="opt-arm"> Distribuir o braço entre longo e curto</label>
-            <label>Comprimento total do braço (m)<input type="number" id="opt-arm-total" step="0.05" min="0.3" max="27" disabled aria-describedby="opt-arm-hint"></label>
-            <p class="muted" id="opt-arm-hint"></p>
+      <button type="button" class="ghost icon-btn" id="info-btn" aria-haspopup="dialog" aria-label="Sobre este tipo" title="Sobre este tipo"><svg class="ico"><use href="#i-info"/></svg></button>
+    </div>
+    <nav><a href="./learn.html">A física por trás</a></nav>
+    <dialog id="info-dlg" aria-labelledby="info-title">
+      <form method="dialog"><button class="ghost close" aria-label="Fechar"><svg class="ico"><use href="#i-x"/></svg></button><h2 id="info-title"></h2><p id="info"></p><button class="ghost">Fechar</button></form>
+    </dialog>
+  </header>
+  <main>
+    <aside id="side">
+      <div role="tablist" aria-label="Painéis">
+        <button type="button" role="tab" id="tab-proj" aria-controls="pane-proj" aria-selected="true">Projeto</button>
+        <button type="button" role="tab" id="tab-opt" aria-controls="pane-opt" aria-selected="false" tabindex="-1">Otimizar</button>
+        <button type="button" role="tab" id="tab-des" aria-controls="pane-des" aria-selected="false" tabindex="-1">Designs</button>
+      </div>
+      <div class="panes">
+        <div role="tabpanel" id="pane-proj" aria-labelledby="tab-proj">
+          <div id="preset-panel">
+            <form id="params" onsubmit="return false"></form>
+            <p id="hint" aria-live="polite">Clique num parâmetro (ou passe o mouse) para ver por que ele importa. Os pontos laranja no desenho também se arrastam.</p>
+            <button class="ghost" id="to-free">Copiar para o editor livre</button>
           </div>
-          <div id="opt-struct-box">
-            <label class="chk"><input type="checkbox" id="opt-struct"> As peças não podem quebrar</label>
-            <div class="row">
-              <select id="opt-struct-mode" aria-label="Critério de quebra do otimizador"><option value="rupture">critério de ruptura</option><option value="design">critério de projeto (NBR)</option></select>
-              <label>FS mínimo<input type="number" id="opt-fs" value="1" min="1" max="10" step="0.1"></label>
-            </div>
-            <label>Material e seção do braço<select id="opt-mat"><option value="">os da ficha do braço</option><option value="all">varrer todos os materiais e bitolas comerciais</option><option value="wood">varrer só madeiras</option><option value="metal">varrer só metais</option></select></label>
-            <label>Bitolas otimizadas por material<input type="number" id="opt-keep" value="2" min="1" max="6" step="1"></label>
-            <p class="muted">Com uma peça disponível de comprimento fixo, marque também "Distribuir o braço" acima e digite o comprimento dela. Na varredura, cada material × bitola ganha uma otimização própria, e a massa do braço passa a ser ρ·A·L.</p>
+          <div id="free-panel" hidden>
+            <div id="tools" role="toolbar" aria-label="Ferramentas do editor livre"></div>
+            <p id="free-status" class="muted" aria-live="polite"></p>
+            <div id="free-props"></div>
+            <p class="row"><button class="ghost" id="fit">Enquadrar desenho</button><button class="ghost" id="new-sketch">Novo esboço vazio</button></p>
           </div>
-          <div class="row"><button type="button" id="opt-run">Otimizar</button><button type="button" class="ghost" id="opt-mincw" title="Com o resto do design como está, acha o menor contrapeso cujo tiro chega à distância-alvo">Contrapeso mínimo para o alvo</button><button type="button" class="ghost" id="opt-pareto" title="Otimiza o alcance sob tetos cada vez menores para a força de pico no eixo e mostra o preço do alcance extra">Fronteira alcance × força no eixo</button><button type="button" class="ghost" id="opt-stop" hidden>Parar</button></div>
-          <p id="opt-status" class="muted" role="status" aria-live="polite"></p>
-          <div id="opt-result"></div>
-          <h2>Varredura</h2>
-          <label>Eixo X<select id="sw-x"></select></label>
-          <label>Eixo Y<select id="sw-y"></select></label>
-          <label class="chk"><input type="checkbox" id="sw-whatif"> Comparar com o melhor caso (curva 1D): reotimiza o ângulo de soltura em cada ponto</label>
-          <div class="row"><button type="button" class="ghost" id="sw-run">Varrer</button></div>
-        </fieldset>
-        <dialog id="opt-help" aria-labelledby="opt-help-title">
-          <form method="dialog">
-            <button class="ghost" aria-label="Fechar" style="float:right">✕</button>
-            <h2 id="opt-help-title">Como usar o otimizador</h2>
+        </div>
+        <div role="tabpanel" id="pane-opt" aria-labelledby="tab-opt" hidden>
+          <details id="opt-help" class="group">
+            <summary>Como usar o otimizador</summary>
             <h3>O que ele faz</h3>
             <p>Procura, entre as variáveis que você liberar, os valores que dão o maior <b>alcance</b> ou a maior <b>eficiência</b> (parte da energia do contrapeso que chega ao projétil). Cada tentativa é uma simulação completa do disparo. A busca usa o método Nelder–Mead, que só compara resultados, a partir de <b>8 pontos de partida em paralelo</b>: o seu design atual e 7 pontos espalhados pela faixa permitida. Tudo o que você não liberar continua fixo no valor atual.</p>
             <h3>Passo a passo</h3>
@@ -234,36 +303,75 @@
             <h3>Sem quebrar</h3>
             <p>Marque <b>As peças não podem quebrar</b> para o otimizador respeitar os materiais das fichas das peças: escolha o critério (ruptura, com valores médios, ou projeto, pela NBR) e o FS mínimo. Um design que quebraria perde pontos em proporção a quanto passa do limite, então a busca para na borda do que aguenta. Com uma seção definida, a massa do braço vira ρ·A·L e acompanha o comprimento.</p>
             <p><b>Uma peça disponível</b> (material X, comprimento Y): marque <b>Distribuir o braço</b> com o comprimento total Y e escolha o material e a bitola na ficha do braço. Para o otimizador escolher também o material, use <b>Material e seção do braço → varrer</b>. Ele faz uma triagem de cada material × bitola comercial com um disparo, otimiza a bitola mais leve que aguenta em cada material e a logo abaixo dela, e lista as melhores. "Aplicar" leva o material, a seção, as medidas e o critério de quebra para o design.</p>
-            <button class="ghost">Fechar</button>
-          </form>
-        </dialog>
-      </div>
-      <div id="free-panel" hidden>
-        <div id="tools"></div>
-        <p id="free-status" class="muted"></p>
-        <div id="free-props"></div>
-        <p class="row"><button class="ghost" id="fit">Enquadrar desenho</button><button class="ghost" id="new-sketch">Novo esboço vazio</button></p>
-      </div>
-      <div class="row">
-        <button id="run">Disparar</button>
-        <select id="speed" aria-label="Velocidade da animação"><option value="1">1×</option><option value="0.25" selected>¼× câmera lenta</option><option value="0.1">⅒×</option></select>
-        <select id="break" aria-label="Quebra estrutural" title="Com a quebra ligada, uma peça que passa da resistência quebra: o disparo para ali e o alcance vale 0. Ruptura: valores médios (madeira na ruptura, metal no escoamento). Projeto: NBR 7190 / NBR 8800, cargas × 1,4. Materiais e seções na ficha de cada peça."><option value="">Quebra: desligada</option><option value="rupture">Quebra: ruptura</option><option value="design">Quebra: projeto (NBR)</option></select>
-      </div>
-      <p id="err" role="alert"></p>
-      <fieldset>
-        <legend>Designs</legend>
-        <div class="row"><input type="text" id="name" placeholder="Nome do design…" autocomplete="off" name="design-name" spellcheck="false" aria-label="Nome do design"><button id="save">Salvar</button></div>
-        <div class="row"><select id="saved" aria-label="Designs salvos"></select><button class="ghost" id="delete">Apagar</button></div>
-        <div class="row">
-          <button class="ghost" id="export">Exportar JSON</button>
-          <label class="file">Importar JSON<input type="file" id="import" accept=".json,application/json"></label>
-          <button class="ghost" id="csv">Dados (CSV)</button>
-          <button class="ghost" id="share" title="Copia um link com o design inteiro dentro dele (nada vai para um servidor)">Copiar link</button>
+          </details>
+          <fieldset id="opt" aria-label="Otimizar">
+            <label>Objetivo<select id="objective"><option value="range">Alcance</option><option value="efficiency">Eficiência</option><option value="target">Distância-alvo</option><option value="lateral">Desvio lateral mínimo (3D)</option><option value="robust">Alcance robusto (3D)</option></select></label>
+            <label>Teto de força na funda, kN (opcional)<input type="number" id="opt-slingcap" min="0" step="0.5" placeholder="sem teto" title="A funda carrega a força que acelera o projétil: com um teto, o otimizador procura o maior alcance que não passa disso (projétil frágil)"></label>
+            <label id="opt-target-box">Distância-alvo (m), para o objetivo de mesmo nome e para o contrapeso mínimo<input type="number" id="opt-target" value="100" min="1" step="1"></label>
+            <p class="muted">Variáveis livres para o otimizador:</p>
+            <div id="opt-vars"></div>
+            <div id="opt-arm-box">
+              <label class="chk"><input type="checkbox" id="opt-arm"> Distribuir o braço entre longo e curto</label>
+              <label>Comprimento total do braço (m)<input type="number" id="opt-arm-total" step="0.05" min="0.3" max="27" disabled aria-describedby="opt-arm-hint"></label>
+              <p class="muted" id="opt-arm-hint"></p>
+            </div>
+            <div id="opt-struct-box">
+              <label class="chk"><input type="checkbox" id="opt-struct"> As peças não podem quebrar</label>
+              <div class="row">
+                <select id="opt-struct-mode" aria-label="Critério de quebra do otimizador"><option value="rupture">critério de ruptura</option><option value="design">critério de projeto (NBR)</option></select>
+                <label>FS mínimo<input type="number" id="opt-fs" value="1" min="1" max="10" step="0.1"></label>
+              </div>
+              <label>Material e seção do braço<select id="opt-mat"><option value="">os da ficha do braço</option><option value="all">varrer todos os materiais e bitolas comerciais</option><option value="wood">varrer só madeiras</option><option value="metal">varrer só metais</option></select></label>
+              <label>Bitolas otimizadas por material<input type="number" id="opt-keep" value="2" min="1" max="6" step="1"></label>
+              <p class="muted">Com uma peça disponível de comprimento fixo, marque também "Distribuir o braço" acima e digite o comprimento dela. Na varredura, cada material × bitola ganha uma otimização própria, e a massa do braço passa a ser ρ·A·L.</p>
+            </div>
+            <div class="row"><button type="button" id="opt-run">Otimizar</button><button type="button" class="ghost" id="opt-stop" hidden>Parar</button></div>
+            <div class="row"><button type="button" class="ghost" id="opt-mincw" title="Com o resto do design como está, acha o menor contrapeso cujo tiro chega à distância-alvo">Contrapeso mínimo para o alvo</button><button type="button" class="ghost" id="opt-pareto" title="Otimiza o alcance sob tetos cada vez menores para a força de pico no eixo e mostra o preço do alcance extra">Fronteira alcance × força no eixo</button></div>
+            <progress id="opt-progress" max="1" value="0" hidden aria-label="Progresso da otimização"></progress>
+            <p id="opt-status" class="muted" role="status" aria-live="polite"></p>
+            <div id="opt-result"></div>
+          </fieldset>
+          <fieldset>
+            <legend>Varredura</legend>
+            <label>Eixo X<select id="sw-x"></select></label>
+            <label>Eixo Y<select id="sw-y"></select></label>
+            <label class="chk"><input type="checkbox" id="sw-whatif"> Comparar com o melhor caso (curva 1D): reotimiza o ângulo de soltura em cada ponto</label>
+            <div class="row"><button type="button" class="ghost" id="sw-run">Varrer</button></div>
+          </fieldset>
         </div>
-      </fieldset>
+        <div role="tabpanel" id="pane-des" aria-labelledby="tab-des" hidden>
+          <fieldset>
+            <legend>Salvar neste navegador</legend>
+            <div class="row"><input type="text" id="name" placeholder="Nome do design…" autocomplete="off" name="design-name" spellcheck="false" aria-label="Nome do design" style="flex:1;width:auto"><button class="ghost" id="save">Salvar</button></div>
+            <div class="row"><select id="saved" aria-label="Designs salvos" style="flex:1"></select><button class="ghost" id="delete">Apagar</button></div>
+          </fieldset>
+          <fieldset>
+            <legend>Levar para fora</legend>
+            <div class="row">
+              <button class="ghost" id="share" title="Copia um link com o design inteiro dentro dele (nada vai para um servidor)">Copiar link</button>
+              <button class="ghost" id="export">Exportar JSON</button>
+              <label class="file">Importar JSON<input type="file" id="import" accept=".json,application/json"></label>
+              <button class="ghost" id="csv">Dados do tiro (CSV)</button>
+            </div>
+            <p class="muted">O link leva o design inteiro dentro dele; nada passa por um servidor.</p>
+          </fieldset>
+        </div>
+      </div>
+      <div class="foot">
+        <div class="row">
+          <button id="run">Disparar</button>
+          <select id="speed" aria-label="Velocidade da animação"><option value="1">1×</option><option value="0.25" selected>¼× lenta</option><option value="0.1">⅒×</option></select>
+          <button type="button" class="ghost icon-btn" id="undo" aria-label="Desfazer (Ctrl+Z)" title="Desfazer (Ctrl+Z)" disabled><svg class="ico"><use href="#i-undo"/></svg></button>
+          <button type="button" class="ghost icon-btn" id="redo" aria-label="Refazer (Ctrl+Shift+Z)" title="Refazer (Ctrl+Shift+Z)" disabled><svg class="ico"><use href="#i-redo"/></svg></button>
+        </div>
+        <div class="row">
+          <select id="break" aria-label="Quebra estrutural" title="Com a quebra ligada, uma peça que passa da resistência quebra: o disparo para ali e o alcance vale 0. Ruptura: valores médios (madeira na ruptura, metal no escoamento). Projeto: NBR 7190 / NBR 8800, cargas × 1,4. Materiais e seções na ficha de cada peça." style="flex:1"><option value="">Quebra: desligada</option><option value="rupture">Quebra: ruptura</option><option value="design">Quebra: projeto (NBR)</option></select>
+        </div>
+        <p id="err" role="alert"></p>
+      </div>
     </aside>
-    <section>
-      <div class="row" id="view-row"><button class="ghost" id="view3d" aria-pressed="false" title="Alterna entre o desenho 2D e a vista 3D (arraste para girar, roda do mouse para zoom)">Vista 3D</button>
+    <section id="work">
+      <div id="view-row"><button class="ghost" id="view3d" aria-pressed="false" title="Alterna entre o desenho 2D e a vista 3D (arraste para girar, roda do mouse para zoom)">Vista 3D</button>
         <button type="button" class="ghost" id="parts-btn" aria-controls="inspector" title="Abre a ficha das peças (dimensões, material, verificações). Também abre clicando numa peça no desenho.">Peças</button>
         <span id="opts3d" hidden>
           <button type="button" class="ghost g3-toggle" aria-expanded="false" aria-controls="g3-cond">Condições</button>
@@ -304,6 +412,7 @@
       <p id="broke" role="alert" hidden></p>
       <div id="stats" role="region" aria-label="Resultados do disparo" aria-live="polite"></div>
       <div id="physics"></div>
+      <h2 class="charts-head">Durante o disparo <span class="muted" style="font-weight:400">· passe o mouse num gráfico para voltar a máquina àquele instante</span></h2>
       <div class="charts">
         <canvas id="chart-energy" role="img" aria-label="Gráfico de energia cinética ao longo do tempo" height="200"></canvas>
         <canvas id="chart-speed" role="img" aria-label="Gráfico da velocidade do projétil" height="200"></canvas>
@@ -314,6 +423,7 @@
       <canvas id="flight" role="img" aria-label="Trajetória do projétil no voo" height="200"></canvas>
     </section>
   </main>
+  <p id="tip" role="status" aria-live="polite" hidden></p>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

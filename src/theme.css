@@ -1,0 +1,36 @@
+/* Shared tokens for index.html and learn.html: a technical drawing sheet.
+   Neutral paper, near-black ink, 1px rules instead of cards, one accent: the revision orange. */
+:root {
+  color-scheme: light dark;
+  --bg: #f6f5f1;       /* paper: the work area */
+  --panel: #ecebe6;    /* second neutral: sidebar, header */
+  --raised: #fbfbf9;   /* floating card, dialogs */
+  --ink: #16191d;
+  --muted: #5b6068;    /* 5.9:1 on paper */
+  --line: #d6d4cc;     /* hairline rules */
+  --field: #868a91;    /* input borders, ≥3:1 */
+  --accent: #c2410c;   /* revision orange: primary action, selection, state */
+  --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
+  --on-accent: #fff;
+  --series-1: #2a78d6; --series-2: #d4521f; --series-3: #0f8a5f;
+  --danger: #c62828; --ok: #0f7a54;
+  --font-ui: Bahnschrift, 'DIN Alternate', 'D-DIN', Barlow, system-ui, sans-serif;
+  --font-read: 'Iowan Old Style', Charter, 'Source Serif Pro', Georgia, serif;
+  --r: 6px;
+  --ease: cubic-bezier(.16, 1, .3, 1);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #131518; --panel: #1a1d21; --raised: #20242a;
+    --ink: #e7e5e0; --muted: #9da2aa; --line: #2d3238; --field: #6c727b;
+    --accent: #f0803c; --on-accent: #131518;
+    --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70;
+    --danger: #ff6b6b; --ok: #3cc48f;
+  }
+}
+::selection { background: color-mix(in srgb, var(--accent) 30%, transparent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+html { scrollbar-color: var(--field) transparent; accent-color: var(--accent); caret-color: var(--accent); }
+a { color: var(--accent); text-underline-offset: 3px; }
+.ico { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; vertical-align: -3px; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; } }

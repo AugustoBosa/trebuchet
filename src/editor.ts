@@ -1,5 +1,5 @@
 // Free editor: tools on the machine canvas + property panel for the selection.
-import { css, cssHeight, fitCanvas } from './charts';
+import { css, cssHeight, fitCanvas, FONT } from './charts';
 import type { Vec } from './physics/model';
 import { painter, view, type Bounds, type View } from './render';
 import { allPoints, analyze, attachments, camDir, compile, detachedJoints, removeBody, segDist, type Role, type SBody, type SJoint, type Sketch } from './sketch';
@@ -14,8 +14,8 @@ export const TOOLS: [Tool, string, string][] = [
   ['pin', 'Pino', 'Clique num ponto: sobre 1 corpo prende ao chão (eixo); sobre 2, articula os dois mais recentes.'],
   ['weld', 'Solda', 'Clique num ponto sobre 2 corpos para uni-los rigidamente.'],
   ['rope', 'Corda', 'Arraste de um corpo (ou do chão) a outro. A corda que toca o projétil é a funda.'],
-  ['hslider', 'Trilho ─', 'Clique num ponto de um corpo: ele passa a correr num trilho horizontal.'],
-  ['vslider', 'Trilho │', 'Clique num ponto de um corpo: ele passa a correr numa guia vertical.'],
+  ['hslider', 'Trilho horiz.', 'Clique num ponto de um corpo: ele passa a correr num trilho horizontal.'],
+  ['vslider', 'Trilho vert.', 'Clique num ponto de um corpo: ele passa a correr numa guia vertical.'],
   ['foot', 'Pé', 'Clique na ponta de um corpo encostada no chão: ela fica presa por espinhos (não escorrega), mas pode descolar se for puxada para cima.'],
   ['pull', 'Equipe', 'Clique num ponto de um corpo: uma equipe puxa uma corda dali para baixo (tração humana). Ajuste força e curso no painel.'],
   ['spike', 'Espetos', 'Clique num ponto de um corpo, no ar: onde ele tocar o chão, os espetos cravam (não escorrega, pode descolar). É a perna do walking arm.'],
@@ -107,7 +107,7 @@ export function createEditor(o: {
     for (let y = step; y <= y1; y += step) line([x0, y], [x1, y], grid, 1);
     line([x0, 0], [x1, 0], muted, 2);
     g.fillStyle = muted;
-    g.font = '11px system-ui, sans-serif';
+    g.font = '11px ' + FONT;
     g.fillText(`grade de ${step} m · roda = zoom · arraste o fundo = mover`, 8, h - 8);
 
     const isSel = (type: 'body' | 'joint', i: number) => sel?.type === type && sel.i === i;
@@ -381,12 +381,19 @@ export function createEditor(o: {
   }
 
   // --- side panel ---
-  o.toolbar.innerHTML = TOOLS.map(([t, label, help]) => `<button type="button" class="ghost" data-tool="${t}" title="${help}">${label}</button>`).join('');
+  // grouped with a visible caption; the help line of the chosen tool shows in the status below (no hover needed)
+  const GROUPS: [string, Tool[]][] = [
+    ['Peças', ['select', 'rod', 'disk', 'projectile', 'cw']],
+    ['Juntas, cordas e energia', ['pin', 'weld', 'rope', 'spring', 'cam', 'pull']],
+    ['Apoios e contatos', ['hslider', 'vslider', 'foot', 'spike', 'roller', 'floor']],
+  ];
+  const btn = ([t, label, help]: (typeof TOOLS)[number]) => `<button type="button" class="ghost" data-tool="${t}" aria-pressed="false" title="${help}">${label}</button>`;
+  o.toolbar.innerHTML = GROUPS.map(([g, ts]) => `<div class="tg" role="group" aria-label="${g}"><span>${g}</span>${ts.map((t) => btn(TOOLS.find((x) => x[0] === t)!)).join('')}</div>`).join('');
   o.toolbar.addEventListener('click', (e) => {
     const t = (e.target as HTMLElement).dataset.tool as Tool | undefined;
     if (!t) return;
     tool = t;
-    o.toolbar.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.tool === t));
+    o.toolbar.querySelectorAll('button').forEach((b) => (b.classList.toggle('on', b.dataset.tool === t), b.setAttribute('aria-pressed', String(b.dataset.tool === t))));
     o.status.textContent = TOOLS.find((x) => x[0] === t)![2];
   });
 

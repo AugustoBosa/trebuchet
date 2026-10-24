@@ -1,5 +1,5 @@
 import { css, drawChart, drawHeatmap, heatCell, timeAt, type ChartSpec, type HeatSpec } from './charts';
-import { LABELS, RANGES } from './labels';
+import { br, LABELS, RANGES } from './labels';
 import { armSplitRange, axlePeak, distinctOptima, evaluate, latinHypercube, minCounterweight, paramMapper, shotsPerEval, shownValue, withSectionMass, type Env3, type Objective, type OptKey, type OptParams, type OptVar, type Struct } from './optimize';
 import { BAR_MATS, sizesFor, type PartSpec } from './materials';
 import type { Mode } from './structure';
@@ -26,15 +26,24 @@ export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p:
   const objective = () => $<HTMLSelectElement>('objective').value as Objective;
   const shown = (v: number) => shownValue(objective(), v);
   const unit = () => (objective() === 'efficiency' ? '%' : 'm');
-  const fmt = (v: number) => `${shown(v).toFixed(objective() === 'lateral' || objective() === 'target' ? 2 : 1)} ${unit()}`;
+  const fmt = (v: number) => `${br(shown(v), objective() === 'lateral' || objective() === 'target' ? 2 : 1)} ${unit()}`;
   // 'lateral' and 'robust' only exist on the 3D solver
   const needs3d = () => (objective() === 'lateral' || objective() === 'robust') && !o.env3() && (status('Esse objetivo usa o motor 3D: ligue a "Vista 3D" primeiro.'), true);
-  const status = (t: string) => ($('opt-status').textContent = t);
+  const bar = $<HTMLProgressElement>('opt-progress');
+  // the bar follows the "done/total" count the status lines already carry; no count yet = indeterminate
+  const status = (t: string) => {
+    $('opt-status').textContent = t;
+    const n = t.match(/(\d+)\/(\d+)/);
+    if (n) bar.value = +n[1] / +n[2];
+    else bar.removeAttribute('value');
+  };
 
   function busy(on: boolean) {
-    $<HTMLButtonElement>('opt-run').disabled = on;
-    $<HTMLButtonElement>('sw-run').disabled = on;
+    for (const id of ['opt-run', 'sw-run', 'opt-mincw', 'opt-pareto']) $<HTMLButtonElement>(id).disabled = on;
+    $('opt-run').setAttribute('aria-busy', String(on));
     $('opt-stop').hidden = !on;
+    bar.hidden = !on;
+    bar.removeAttribute('value');
   }
 
   // --- fixed-beam option: long + short arm = a total the user sets; the optimizer only chooses where to cut it
@@ -56,7 +65,6 @@ export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p:
     syncArm();
   });
   $('opt-arm-total').addEventListener('input', () => (armDirty = true));
-  $('opt-help-btn').addEventListener('click', () => $<HTMLDialogElement>('opt-help').showModal());
 
   const stopAll = () => (pool.forEach((w) => w.terminate()), (pool = []));
 
@@ -138,8 +146,8 @@ export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p:
     const cw = minCounterweight(o.kind(), o.params, target);
     if (cw === undefined) return void status(`Nenhum contrapeso da faixa (${RANGES.cwMass.slice(0, 2).join(' a ')} kg) chega a ${target} m com o resto do design como está. Mude o ângulo, a funda ou o braço.`);
     const got = evaluate(o.kind(), { ...o.params, cwMass: cw }, 'range');
-    status(`Contrapeso mínimo para ${target} m: ${+cw.toPrecision(4)} kg (o tiro chega a ${got.toFixed(1)} m), com o resto do design como está.`);
-    $('opt-result').innerHTML = `<table><tr><th>Contrapeso (kg)</th><th>Alcance</th><th></th></tr><tr><td>${+cw.toPrecision(4)}</td><td><b>${got.toFixed(1)} m</b></td><td><button type="button" class="ghost" id="mincw-apply">Aplicar</button></td></tr></table>`;
+    status(`Contrapeso mínimo para ${target} m: ${br(cw)} kg (o tiro chega a ${br(got, 1)} m), com o resto do design como está.`);
+    $('opt-result').innerHTML = `<table><tr><th>Contrapeso (kg)</th><th>Alcance</th><th></th></tr><tr><td>${br(cw)}</td><td><b>${br(got, 1)} m</b></td><td><button type="button" class="ghost" id="mincw-apply">Aplicar</button></td></tr></table>`;
     $('mincw-apply').addEventListener('click', () => o.apply({ cwMass: +cw.toPrecision(4) }));
   });
 
@@ -181,7 +189,7 @@ export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p:
     status(`Fronteira: ${front.length} designs que ninguém bate nos dois critérios (${evals} simulações). Cada linha é o maior alcance achado para aquela força no eixo.`);
     $('opt-result').innerHTML = `<table>
       <tr><th>Força de pico no eixo (kN)</th><th>Alcance</th>${cols.map((k) => `<th>${label(k)}</th>`).join('')}<th></th></tr>
-      ${front.map((x, i) => `<tr><td>${(x.peak / 1000).toFixed(1)}</td><td><b>${x.range.toFixed(1)} m</b></td>${cols.map((k) => `<td>${+(x.p[k] ?? 0).toPrecision(4)}</td>`).join('')}
+      ${front.map((x, i) => `<tr><td>${br(x.peak / 1000, 1)}</td><td><b>${br(x.range, 1)} m</b></td>${cols.map((k) => `<td>${br(x.p[k] ?? 0)}</td>`).join('')}
         <td><button type="button" class="ghost" data-front="${i}">Aplicar</button></td></tr>`).join('')}
     </table>`;
     $('opt-result').querySelectorAll<HTMLButtonElement>('[data-front]').forEach((b) =>
@@ -266,9 +274,9 @@ export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p:
         const cols = vars.flatMap((v): OptKey[] => (v === 'armSplit' ? ['longArm', 'shortArm'] : [v]));
         $('opt-result').innerHTML = `<table>
           <tr><th>Material</th><th>Bitola</th><th>Massa do braço (kg)</th>${cols.map((k) => `<th>${label(k)}</th>`).join('')}<th>${OBJECTIVE_NAMES[obj]}</th><th>FS</th><th></th></tr>
-          ${ok.slice(0, 12).map((x, i) => `<tr><td>${BAR_MATS[x.c.mat].label}${BAR_MATS[x.c.mat].note ? ` <span class="muted" title="Valores estimados: ${BAR_MATS[x.c.mat].note}">(est.)</span>` : ''}</td><td>${x.c.size}</td><td>${x.params.armMass.toFixed(1)}</td>
-            ${cols.map((k) => `<td>${+(x.params[k] ?? 0).toPrecision(4)}</td>`).join('')}
-            <td><b>${fmt(x.value)}</b></td><td>${x.fs.toFixed(2)}</td><td><button type="button" class="ghost" data-mat="${i}">Aplicar</button></td></tr>`).join('')}
+          ${ok.slice(0, 12).map((x, i) => `<tr><td>${BAR_MATS[x.c.mat].label}${BAR_MATS[x.c.mat].note ? ` <span class="muted" title="Valores estimados: ${BAR_MATS[x.c.mat].note}">(est.)</span>` : ''}</td><td>${x.c.size}</td><td>${br(x.params.armMass, 1)}</td>
+            ${cols.map((k) => `<td>${br(x.params[k] ?? 0)}</td>`).join('')}
+            <td><b>${fmt(x.value)}</b></td><td>${br(x.fs, 2)}</td><td><button type="button" class="ghost" data-mat="${i}">Aplicar</button></td></tr>`).join('')}
         </table>`;
         $('opt-result').querySelectorAll<HTMLButtonElement>('[data-mat]').forEach((b) =>
           b.addEventListener('click', () => {
@@ -296,17 +304,17 @@ export function mountOptimizer(o: { kind: () => Kind; params: Params; apply: (p:
     const truth = (score: number, p: OptParams) => { const v = real?.(p) ?? score; return { v, over: score < v * (1 - 1e-6) }; };
     const cur = truth(current, base);
     const flag = (over: boolean) => (over ? ' <span class="muted" title="Passa do teto de força na funda ou do FS mínimo: o valor é o do tiro sem o limite.">(fora dos limites)</span>' : '');
-    const gain = (v: number) => (cur.v > 0 && objective() !== 'lateral' && objective() !== 'target' ? ` <span class="muted">(${v >= cur.v ? '+' : ''}${((100 * (v - cur.v)) / cur.v).toFixed(1)}%)</span>` : '');
+    const gain = (v: number) => (cur.v > 0 && objective() !== 'lateral' && objective() !== 'target' ? ` <span class="muted">(${v >= cur.v ? '+' : ''}${br((100 * (v - cur.v)) / cur.v, 1)} %)</span>` : '');
     const stuckNote = stuck ? ` ${stuck} partida(s) terminaram em designs que falham ou rendem menos da metade, e foram omitidas.` : '';
     status((optima.length === 1
       ? `${STARTS} partidas, ${evals} simulações: todas as que deram certo chegaram ao mesmo ótimo, provavelmente o global nessa faixa.`
       : `${STARTS} partidas, ${evals} simulações: ${optima.length} ótimos locais distintos. Compare as soluções.`) + stuckNote);
     $('opt-result').innerHTML = `<table>
       <tr><th></th>${vars.map((k) => `<th>${label(k)}</th>`).join('')}<th>${name}</th>${st ? '<th>FS</th>' : ''}<th>achado</th><th></th></tr>
-      <tr><td>atual</td>${vars.map((k) => `<td>${+(base[k] ?? 0).toPrecision(4)}</td>`).join('')}<td>${fmt(cur.v)}${flag(cur.over)}</td>${st ? '<td></td>' : ''}<td></td><td></td></tr>
+      <tr><td>atual</td>${vars.map((k) => `<td>${br(base[k] ?? 0)}</td>`).join('')}<td>${fmt(cur.v)}${flag(cur.over)}</td>${st ? '<td></td>' : ''}<td></td><td></td></tr>
       ${optima.map((op, i) => ({ op, i, t: truth(op.value, op.params) })).map(({ op, i, t }) => `<tr><td>${i === 0 ? '<b>melhor</b>' : `#${i + 1}`}</td>
-        ${vars.map((k) => `<td>${+(op.params[k] ?? 0).toPrecision(4)}</td>`).join('')}
-        <td><b>${fmt(t.v)}</b>${gain(t.v)}${flag(t.over)}</td>${st ? `<td${(op.fs ?? 0) < st.fsMin * 0.97 ? ' class="fail"' : ''}>${(op.fs ?? 0).toFixed(2)}</td>` : ''}<td>${op.count}×</td>
+        ${vars.map((k) => `<td>${br(op.params[k] ?? 0)}</td>`).join('')}
+        <td><b>${fmt(t.v)}</b>${gain(t.v)}${flag(t.over)}</td>${st ? `<td${(op.fs ?? 0) < st.fsMin * 0.97 ? ' class="fail"' : ''}>${br(op.fs ?? 0, 2)}</td>` : ''}<td>${op.count}×</td>
         <td><button type="button" class="ghost" data-opt="${i}">Aplicar</button></td></tr>`).join('')}
     </table>`;
     $('opt-result').querySelectorAll<HTMLButtonElement>('[data-opt]').forEach((b) =>

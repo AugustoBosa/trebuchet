@@ -3,44 +3,33 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="theme-color" content="#1d1a16" media="(prefers-color-scheme: dark)" />
-  <meta name="theme-color" content="#f4efe4" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#131518" media="(prefers-color-scheme: dark)" />
+  <meta name="theme-color" content="#f6f5f1" media="(prefers-color-scheme: light)" />
   <title>A Física do Trebuchet</title>
+  <link rel="stylesheet" href="/src/theme.css" />
   <style>
-    :root {
-      color-scheme: light dark; /* native controls (select popups, scrollbars) follow the theme */
-      --bg: #f4efe4; --ink: #2b2620; --muted: #6b6052; --accent: #a0412d; --line: #d8cdb8; --field: #8c8070; --panel: #ebe4d5;
-      --series-1: #2a78d6; --series-2: #d4521f; --series-3: #0f8a5f; --good: #1d7a4d; --bad: #a0412d;
-    }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg: #1d1a16; --ink: #ece4d4; --muted: #a39887; --accent: #e07a5f; --line: #3a342c; --field: #7f7565; --panel: #26221d;
-        --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --good: #4fc08d; --bad: #e07a5f;
-      }
-    }
+    :root { --good: var(--ok); --bad: var(--danger); }
     * { box-sizing: border-box; }
     html { scroll-behavior: smooth; }
-    body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.65 Georgia, 'Times New Roman', serif; }
-    a { color: var(--accent); }
-    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-    h1, h2, h3 { text-wrap: balance; scroll-margin-top: 16px; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.65 var(--font-read); }
+    h1, h2, h3 { font-family: var(--font-ui); letter-spacing: -.015em; text-wrap: balance; scroll-margin-top: 16px; }
     p, li { text-wrap: pretty; }
 
     /* page shell: sticky index on the left, content uses the remaining width */
     .shell { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 40px; max-width: 1760px; margin: auto; padding: 0 28px; }
-    .toc { position: sticky; top: 0; align-self: start; max-height: 100vh; overflow: auto; padding: 24px 0; font: 14px/1.35 system-ui, sans-serif; }
+    .toc { position: sticky; top: 0; align-self: start; max-height: 100vh; overflow: auto; padding: 24px 0; font: 14px/1.35 var(--font-ui); }
     .toc a { display: block; padding: 5px 10px; border-left: 2px solid var(--line); color: var(--muted); text-decoration: none; }
     .toc a:hover { color: var(--ink); }
     .toc a[aria-current] { color: var(--ink); border-left-color: var(--accent); font-weight: 600; }
     .toc .back { border: 0; padding: 0 0 14px; color: var(--accent); font-weight: 600; }
-    .toc h2 { font: 600 11px system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 18px 0 6px; border: 0; padding: 0; }
+    .toc h2 { font: 600 11px var(--font-ui); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 18px 0 6px; border: 0; padding: 0; }
     .toc .sub a { font-size: 13px; padding-left: 20px; }
     main { min-width: 0; padding-bottom: 96px; }
 
     .hero { padding: 32px 0 8px; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 32px; align-items: center; }
     h1 { font-size: clamp(32px, 4vw, 52px); line-height: 1.1; margin: 0 0 12px; }
     .lede { font-size: 22px; color: var(--muted); margin: 0; max-width: 40ch; }
-    .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 22px; font-family: system-ui, sans-serif; }
+    .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 22px; font-family: var(--font-ui); }
     .fact { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--panel); }
     .fact b { display: block; font-size: 26px; font-variant-numeric: tabular-nums; line-height: 1.1; }
     .fact span { font-size: 12px; line-height: 1.35; color: var(--muted); display: block; }
@@ -54,15 +43,15 @@
     .full { grid-column: 1 / -1; }
     .cols2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 48px; }
     .tex { overflow-x: auto; overflow-y: hidden; padding: 4px 0; }
-    .note { font: 15px/1.5 system-ui, sans-serif; color: var(--muted); border-left: 3px solid var(--line); padding-left: 12px; }
-    table { border-collapse: collapse; width: 100%; font: 15px/1.4 system-ui, sans-serif; }
+    .note { font: 15px/1.5 var(--font-ui); color: var(--muted); border-left: 3px solid var(--line); padding-left: 12px; }
+    table { border-collapse: collapse; width: 100%; font: 15px/1.4 var(--font-ui); }
     td, th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
     ol li, ul li { margin: 6px 0; }
 
     figure { margin: 0; }
-    figcaption { font: 13px/1.4 system-ui, sans-serif; color: var(--muted); margin-top: 6px; }
+    figcaption { font: 13px/1.4 var(--font-ui); color: var(--muted); margin-top: 6px; }
     .svg { width: 100%; height: auto; display: block; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
-    .svg text { font: 12px system-ui, sans-serif; fill: var(--ink); }
+    .svg text { font: 12px var(--font-ui); fill: var(--ink); }
     .svg .m { fill: var(--muted); }
     .svg .ln { stroke: var(--ink); stroke-width: 4; stroke-linecap: round; fill: none; }
     .svg .th { stroke: var(--muted); stroke-width: 2; fill: none; }
@@ -72,7 +61,7 @@
     .svg .box { fill: var(--panel); stroke: var(--ink); stroke-width: 2; }
     .svg .dot { fill: var(--bg); stroke: var(--accent); stroke-width: 2; }
 
-    .mini, .compare, .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; font: 14px system-ui, sans-serif; }
+    .mini, .compare, .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; font: 14px var(--font-ui); }
     .mini canvas, .panel canvas { width: 100%; display: block; border-radius: 6px; margin-bottom: 8px; }
     .mini canvas.m { cursor: pointer; }
     .ctl { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 4px 16px; }
@@ -89,22 +78,22 @@
     .story { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
     .story figure { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px; }
     .story canvas { width: 100%; display: block; }
-    .story b { font: 600 13px system-ui, sans-serif; }
+    .story b { font: 600 13px var(--font-ui); }
 
     /* per-model sections */
     .models { grid-column: 1 / -1; }
     .model { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 48px; border-top: 1px solid var(--line); margin-top: 40px; padding-top: 24px; }
     .model > header { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
     .model h3 { margin: 0; font-size: 26px; }
-    .chip { font: 12px system-ui, sans-serif; color: var(--muted); border: 1px solid var(--line); border-radius: 99px; padding: 2px 10px; }
+    .chip { font: 12px var(--font-ui); color: var(--muted); border: 1px solid var(--line); border-radius: 99px; padding: 2px 10px; }
     .model .txt p { margin-top: 0; }
-    .pc { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font: 14px/1.45 system-ui, sans-serif; }
+    .pc { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font: 14px/1.45 var(--font-ui); }
     .pc > div { border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
     .pc h4 { margin: 0 0 4px; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; }
     .pc .pro h4 { color: var(--good); }
     .pc .con h4 { color: var(--bad); }
     .pc ul { margin: 0; padding-left: 18px; }
-    .open { display: inline-block; margin-top: 12px; font: 600 14px system-ui, sans-serif; }
+    .open { display: inline-block; margin-top: 12px; font: 600 14px var(--font-ui); }
 
     @media (pointer: coarse) { .ctl input[type=range] { min-height: 32px; } .toc a { padding: 10px; } }
     @media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
@@ -131,7 +120,7 @@
         <h1>A física do trebuchet</h1>
         <p class="lede">Como uma alavanca, uma corda e uma pedra pesada transformam altura em alcance, e por que levou mil anos para acertar o projeto.</p>
         <div class="facts">
-          <div class="fact"><b>13 modelos</b><span>simulados no laboratório</span></div>
+          <div class="fact"><b>14 modelos</b><span>simulados no laboratório</span></div>
           <div class="fact"><b>400 m</b><span>teto ideal com M/m = 100 e queda de 2 m</span></div>
           <div class="fact"><b>~56 %</b><span>eficiência do contrapeso fixo padrão</span></div>
           <div class="fact"><b>0,1 ms</b><span>passo de integração Runge–Kutta</span></div>
@@ -348,7 +337,7 @@ m L_s^2\,\ddot\psi + m L_1 L_s\,(c\,\ddot\theta - s\,\dot\theta^2) &= -m g L_s\c
     <section class="sec" id="tresd">
       <h2>10. Em três dimensões</h2>
       <div class="txt">
-        <p>Um trebuchet simétrico não tem nenhuma força fora do seu plano, e por isso um modelo plano basta para ele. O laboratório tem também um solver 3D (botão <b>Vista 3D</b>), escrito como generalização exata do plano. Rodado nos 13 tipos, ele reproduz o solver 2D com diferença de ~10⁻¹² no alcance, na eficiência, na força no eixo e na flexão do braço, e o desvio lateral sai exatamente zero.</p>
+        <p>Um trebuchet simétrico não tem nenhuma força fora do seu plano, e por isso um modelo plano basta para ele. O laboratório tem também um solver 3D (botão <b>Vista 3D</b>), escrito como generalização exata do plano. Rodado nos 14 tipos, ele reproduz o solver 2D com diferença de ~10⁻¹² no alcance, na eficiência, na força no eixo e na flexão do braço, e o desvio lateral sai exatamente zero.</p>
         <p>Em 3D, cada corpo ganha seis graus de liberdade. A orientação é um quatérnion, a inércia passa a ser um tensor no referencial do mundo, <span class="itex">I_w = R\,I\,R^\top</span>, e aparece o termo giroscópico:</p>
         <div class="tex">I_w\,\dot{\boldsymbol\omega} = \boldsymbol\tau - \boldsymbol\omega\times(I_w\,\boldsymbol\omega).</div>
         <p>Uma articulação vira cinco restrições: três prendem o ponto e duas mantêm os eixos alinhados. As juntas "planas" (batente, solda, tambor) medem a torção em torno do eixo da articulação. Além da comparação com o 2D, o solver passa por testes de física pura:</p>
