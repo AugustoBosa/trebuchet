@@ -29,6 +29,8 @@ A física foi conferida contra fontes externas, e os testes guardam os números 
 
 Limite conhecido: com atrito e ar e funda sem massa, o corpo rígido fica 13–18% acima dos tiros de campo de Horsdal, a mesma diferença que o artigo encontra no próprio cálculo ab initio. Cavalete flexível, incerteza da inércia e flexão da viga foram testados e não explicam (todos < 3%). A diferença está na velocidade de soltura; uma bolsa + cordas de ~85 g (massa não publicada) fecha 4 das 5 medições, mas os testes continuam sem ela. Nada foi ajustado para fechar a diferença.
 
+Gap conhecido: só o articulado e o Fiffer têm validação externa. Para os outros 12 tipos não foi encontrada nenhuma máquina medida e publicada (com massas, geometria e alcance); eles se apoiam na conservação de energia, na igualdade 2D = 3D e em testes de consistência. O walking arm, o VLR, o Merlin e o BAKA foram pesquisados e fechados como não validáveis (veja `CHANGELOG.md`).
+
 ## Estrutura
 
 `src/physics` (solver plano) · `src/physics3d` (solver 3D) · `src/presets.ts` (os tipos) · `src/optimize.ts` (otimizador) · `src/structure.ts`, `src/parts.ts`, `src/materials.ts` (peças e verificação) · `src/main.ts` (interface) · `test/` (testes).
