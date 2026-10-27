@@ -2,6 +2,13 @@
 
 Simulador de trebuchets (Vite + TypeScript). Rodar: `npm run dev` · testes: `npm test` · build: `npm run build`.
 
+## 2026-10-24/25: Lighthouse, publicação no GitHub Pages e favicon
+
+- **Lighthouse de novo:** acessibilidade e boas práticas seguem 100 (desktop e celular). SEO 91 só por falta de `robots.txt` (o Vite devolve o `index.html` no lugar); `llms.txt` e `ai-catalog.json` idem, irrelevantes aqui.
+- **CLS 0,099 → 0** (85770fe): a primeira pintura sai antes de o `main.ts` montar o `#params`, então a dica e o botão "Copiar para o editor livre" apareciam no topo e eram empurrados para baixo. `#params:empty ~ * { display: none }` em `index.html`. Achado com trace do DevTools; acontecia também no build de produção, não só no dev.
+- **Publicado** (42dd250): `base: './'` no `vite.config.ts` (o build funciona em qualquer subcaminho; testado em `/trebuchet/` com as duas páginas, os workers do otimizador e do 3D e as fontes do KaTeX) e `.github/workflows/deploy.yml` (testes + build + Pages). Repositório público AugustoBosa/trebuchet, site https://augustobosa.github.io/trebuchet/.
+- **Favicon** (75bd3d5): `favicon.svg` na raiz, silhueta do trebuchet no laranja de revisão, ligado nas duas páginas.
+
 ## 2026-10-23: redesenho da interface (branch `feat/redesign`)
 
 Diagnóstico, crítica, direção e verificação em `docs/redesign/`. Direção "prancha técnica": papel neutro, réguas finas no lugar de cartões, letra DIN (Bahnschrift), um acento laranja de revisão; tokens únicos em `src/theme.css` para as duas páginas.

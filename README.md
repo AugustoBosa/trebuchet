@@ -2,6 +2,8 @@
 
 Simulador de trebuchets no navegador (Vite + TypeScript, sem servidor): 14 tipos de máquina, solver de corpos rígidos próprio em 2D e 3D, otimizador, editor livre e verificação estrutural com materiais brasileiros.
 
+**Online:** https://augustobosa.github.io/trebuchet/ (GitHub Pages; cada push na `main` roda os testes, faz o build e publica, via `.github/workflows/deploy.yml`).
+
 ```bash
 npm install
 npm run dev      # laboratório em http://localhost:5173 (a página `learn.html` explica a física)
