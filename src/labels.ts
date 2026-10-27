@@ -20,7 +20,7 @@ export const LABELS: Record<keyof Params, string> = {
   axleMu: 'Atrito no eixo μ',
   axleRadius: 'Raio do eixo (m)',
   troughMu: 'Atrito na calha μ',
-  rollCrr: 'Resistência ao rolamento das rodas (Crr)',
+  rollCrr: 'Resistência ao rolamento das rodas, Crr',
   impactE: 'Restituição dos impactos (e)',
   cockDeg: 'Ângulo de armação (°)',
   legLength: 'Perna: eixo → espinhos (m)',

@@ -1,3 +1,4 @@
+import { SECTIONS } from '../physics/bending';
 import { G } from '../physics/model';
 import { jointRows3, omega, point3, worldAxis, type State3 } from './constraints3';
 import { add, cross, dot, norm, rotateInv, scale, sub, type Joint3, type Mechanism3, type V3 } from './model3';
@@ -5,7 +6,6 @@ import { add, cross, dot, norm, rotateInv, scale, sub, type Joint3, type Mechani
 // 3D twin of physics/bending.ts. The moment at a cut is a vector: its part across the rod bends it (reported), the
 // part along it twists it. Distributed load over the far side [x_s, L/2] (a = a_c + α×e·x + ω×(ω×e·x)):
 //   M_dist = μ [ e×(g − a_c)·I1 − (α⊥ + (e×ω)(ω·e))·I2 ]
-const SECTIONS = 41;
 
 export function anchor3(s: State3, j: Joint3, b: number): V3 | undefined {
   const onRod = (w: V3): V3 => [rotateInv(s.q, 7 * b + 3, sub(w, [s.q[7 * b], s.q[7 * b + 1], s.q[7 * b + 2]]))[0], 0, 0];

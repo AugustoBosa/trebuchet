@@ -2,6 +2,17 @@
 
 Simulador de trebuchets (Vite + TypeScript). Rodar: `npm run dev` · testes: `npm test` · build: `npm run build`.
 
+## 2026-10-27: varredura de docs e código
+
+- **F2K:** arrastar o eixo levantava a máquina `axleLift` (0,6 m) de uma vez; o handle é desenhado em `pivotHeight + axleLift` e gravava a altura inteira em `pivotHeight`.
+- **Fiffer:** sem handles de arrastar (desenhavam a geometria do contrapeso fixo e mexiam em parâmetros que `buildFiffer` ignora) e sem a "razão de braços L₁/L₂", que vinha dos braços do preset padrão.
+- **Import de design:** atrito de pino negativo agora vira 0 (μ < 0 injetava energia). Coberto em `test/sketch.test.ts`.
+- **Vento lateral:** positivo empurra para a **direita** de quem olha o alvo (+z, com x para o alvo e y para cima); o tooltip e a legenda do `learn.html` diziam esquerda. A mira já estava certa (positivo = esquerda).
+- **Textos:** torre da polia do MURLIN com nome na tabela de FS (aparecia "tower"); equipe a ~200 N por pessoa em todo lugar (a ficha usava 250); Crr deixou de virar a unidade do eixo da varredura; "Densidade do ar (kg/m³)" no editor; `<meta description>` no `learn.html`.
+- **Comentários obsoletos:** "sem restituição" no solver (ela existe, `impactE`), comentário do RK4 fora do lugar, extras do Fiffer que não batiam com os padrões; critério da corda em projeto (ruptura ÷ 5, tração sem × 1,4) explícito em `structure.ts`.
+- **Limpeza:** `segDist` e `SECTIONS` duplicados, imports e re-export sem uso, ramos iguais no editor; `@types/three` passou para `devDependencies`.
+- **Docs:** README (madeiras: 24 do IPT + 3 de CIRAD/EN 408; Node 20.19+; `atalhos/`), nota de divergências na spec de materiais, notas de estado nos docs do redesenho.
+
 ## 2026-10-24/25: Lighthouse, publicação no GitHub Pages e favicon
 
 - **Lighthouse de novo:** acessibilidade e boas práticas seguem 100 (desktop e celular). SEO 91 só por falta de `robots.txt` (o Vite devolve o `index.html` no lugar); `llms.txt` e `ai-catalog.json` idem, irrelevantes aqui.

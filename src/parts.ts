@@ -8,7 +8,7 @@ import { KINDS, type Kind, type Params } from './presets';
 import type { SBody, SJoint, Sketch } from './sketch';
 import { BAR_MATS, barMat, DEF_BAR, hasSection, MAT_ALIAS, METALS, ROPE_MATS, section, sizesFor, type PartSpec, type Shape } from './materials';
 import { assess, ropeBreaking, type Assessment } from './structure';
-export { BAR_MATS, ROPE_MATS, type PartSpec };
+export { BAR_MATS, type PartSpec };
 
 // --- materials: bars, ropes and axle pins come from materials.ts (Brazilian woods, steels, aluminium) ---
 const DEF_PIN = 'aco-a36';
@@ -311,7 +311,7 @@ export function presetParts(c: PresetCtx): Part[] {
     const L0 = Math.hypot(...([0, 1].map((k) => m.bodies[sp.body].pos[k] + rotLocal(m.bodies[sp.body].angle, sp.local)[k] - sp.anchor[k]) as [number, number]));
     add('springs', 'Molas', [...param('springK'), ...param('springRest'), { label: 'Comprimento armado', value: `${fmt(L0)} m` }, { label: 'Energia armazenada ½k(L − L₀)²', value: `${fmt((0.5 * p.springK * Math.max(0, L0 - p.springRest) ** 2) / 1000)} kJ` }]);
   }
-  add('crew', 'Equipe de tração', [...param('crewForce'), ...param('pullStroke'), { label: 'Pessoas (≈ 250 N cada)', value: fmt(p.crewForce / 250, 0) }, { label: 'Trabalho F·s', value: `${fmt((p.crewForce * p.pullStroke) / 1000)} kJ` }]);
+  add('crew', 'Equipe de tração', [...param('crewForce'), ...param('pullStroke'), { label: 'Pessoas (≈ 200 N cada)', value: fmt(p.crewForce / 200, 0) }, { label: 'Trabalho F·s', value: `${fmt((p.crewForce * p.pullStroke) / 1000)} kJ` }]);
 
   // anything left (so every piece on screen opens a card)
   for (const [key, id] of own) {

@@ -54,6 +54,9 @@ describe('editor livre (sketch)', () => {
     expect(sk.bodies[0].mass).toBeGreaterThan(0);
     expect(sk.joints).toHaveLength(1);
     expect(sk.releaseDeg).toBe(45);
+    // a negative pin friction would add energy
+    const neg = sanitizeSketch({ bodies: [{ kind: 'rod', a: [0, 0], b: [1, 1], mass: 1 }], joints: [{ kind: 'pin', at: [0, 0], a: 0, b: 'ground', mu: -0.3 }] });
+    expect(neg.joints[0]).toMatchObject({ kind: 'pin', mu: 0 });
   });
 
   it('conexão solta (eixo fora do braço) é detectada e bloqueia o disparo', () => {

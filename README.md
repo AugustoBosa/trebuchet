@@ -11,12 +11,14 @@ npm test         # vitest
 npm run build    # tsc + vite build
 ```
 
+Precisa de Node 20.19+ ou 22.12+ (exigência do Vite 8; o CI usa o 22). No Windows, `atalhos/abrir.vbs` sobe o servidor escondido na porta 5190 (com `--host`, para abrir no celular na mesma rede) e abre o navegador com um duplo clique; `atalhos/parar-servidor.vbs` desliga.
+
 ## O que tem
 
 - **14 tipos:** contrapeso fixo, articulado, floating arm, tração humana, whipper, walking arm, MURLIN, roda, F2K, FET, King Arthur, FAKA, mola e Fiffer. Mais um editor livre (corpos, juntas, cames, molas, roletes, espinhos).
 - **Solver próprio** com restrições, contatos unilaterais (cordas que afrouxam, pés que descolam, rodas que pousam), atrito de mancal, arrasto, vento e funda com massa (bolsa + cordas, que ficam na funda na soltura). A versão 3D dá dispersão (elipses de 1σ/2σ), desvio lateral e exportação glb/stl.
 - **Otimizador** (Nelder–Mead de 8 partidas em paralelo): alcance, eficiência, distância-alvo (e contrapeso mínimo para ela), desvio lateral e alcance robusto; braço de comprimento total fixo; varredura de material × bitola; fronteira alcance × força no eixo; teto de força na funda (projétil frágil); "What If" que compara a varredura com o melhor ângulo de soltura.
-- **Estrutura:** as peças quebram durante o tiro (ruptura ou critério de projeto NBR 8800 / madeira), com 27 madeiras do IPT, aços, alumínios e cordas.
+- **Estrutura:** as peças quebram durante o tiro (ruptura ou critério de projeto NBR 8800 / madeira), com 27 madeiras (24 do IPT, mais Ipê e Cumaru do CIRAD e Maçaranduba pela EN 408), aços, alumínios e cordas.
 - **Compartilhar:** "Copiar link" põe o design inteiro no fragmento da URL (nada vai para servidor). Também há JSON e CSV.
 
 ## Validação

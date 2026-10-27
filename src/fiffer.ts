@@ -40,7 +40,8 @@ export const FIFFER = {
 };
 const F0 = FIFFER;
 
-// x: the machine's extras in lb (the 2026 update: 11 oz sling, a 9.56 lb release pin, 9 oz of hardware at the tip)
+// x: the machine's extras in lb. Defaults: 1.7 lb sling, 9 lb release pin, nothing at the tip; the validation run
+// (test/fiffer.test.ts) uses the inventors' 2013 file: 11 oz sling, 9 lb pin, 9 oz of hardware at the tip.
 export function buildFiffer(p: Params, x: { slingLB?: number; pinLB?: number; tipLB?: number } = {}): Mechanism {
   const { slingLB = F0.slingLB, pinLB = 9, tipLB = 0 } = x;
   const F = FIFFER, drop = F.drop, alpha = Math.PI / 2;

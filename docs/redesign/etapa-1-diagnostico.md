@@ -55,10 +55,12 @@ Severidade (Nielsen): 0 não é problema · 1 cosmético · 2 menor · 3 maior �
 
 ## Acessibilidade (já feito vs. falta)
 
-Já feito em 2026-10-16: aria-labels, foco visível, contraste ≥ 4,5:1, alvos de 44 px no toque, `prefers-reduced-motion`, tabela de dados dos gráficos.
+Já feito em 2026-10-15: aria-labels, foco visível, contraste ≥ 4,5:1, alvos de 44 px no toque, `prefers-reduced-motion`, tabela de dados dos gráficos.
 Falta: dicas em `title` (não lidas por leitores de tela de forma confiável nem no toque); `#hint` não está ligado ao controle por `aria-describedby`; os 17 botões do editor não são um `role=toolbar` com `aria-pressed` (o 3D já é).
 
 ## Prioridades para as etapas seguintes
+
+> Registro do diagnóstico de 2026-10-23. Os itens abaixo foram tratados nas etapas 3 a 6 (`etapas-4-a-6.md`); o editor livre ficou com 3 grupos de ferramentas, não 4.
 
 Fazer primeiro (sev. 3):
 1. **Layout em áreas de trabalho**: a máquina e os resultados sempre visíveis; a lateral vira abas/seções recolhíveis (Projeto · Ambiente · Otimizar · Designs). Ataca T3, T4, H1, H6, H8.

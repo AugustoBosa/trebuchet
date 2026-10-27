@@ -26,10 +26,10 @@
 | `vite build` | ok |
 | Lighthouse acessibilidade, desktop e celular | 100 / 100 |
 | Lighthouse boas práticas | 100 / 100 |
-| CLS no celular | 0,113 → abaixo do limite após reservar o lugar dos resultados |
+| CLS no celular | 0,113 → abaixo do limite após reservar o lugar dos resultados (depois zerado, commit 85770fe) |
 | Celular: seletor de tipo | y = 836 px → 45 px |
 | Celular: altura da página | 5748 px → 3700 px |
 | Desktop: máquina visível enquanto se mexe na lateral | sim (rolagens separadas) |
 | Navegador: tiro, delta, desfazer/refazer, abas, otimizador com barra, editor livre, vista 3D, tema claro e escuro | conferidos |
 
-Falhas restantes do Lighthouse (robots.txt, llms.txt) vêm do servidor de desenvolvimento devolvendo o HTML para qualquer caminho; não se aplicam a um app local.
+Falhas restantes do Lighthouse (robots.txt, llms.txt) vinham do servidor de desenvolvimento devolvendo o HTML para qualquer caminho. No GitHub Pages (publicado em 2026-10-25) esses caminhos dão 404, que é o comportamento esperado.

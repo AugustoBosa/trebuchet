@@ -224,8 +224,6 @@ export function accelerations(m: Mechanism, s: State, active: boolean[], prev: n
   }
 }
 
-// Classic RK4 on (q, v). Plain loops, same arithmetic order as the textbook form (results are bit-identical
-// to the earlier .map() version); stage velocities double as the stage dq.
 // Unilateral joints and their sign σ: active while σλ ≥ 0, open while σC > 0.
 // Floor/stop push (λ ≥ 0, open when C > 0); a rope only pulls (λ ≤ 0) and goes slack when shorter than its length.
 const contactSign = (j: Mechanism['joints'][number]) => (j.kind === 'floor' || j.kind === 'stop' || j.kind === 'foot' || j.kind === 'roller' ? 1 : j.kind === 'rope' || j.kind === 'cam' ? -1 : 0);
@@ -300,6 +298,7 @@ export function reboundOpen(bounce: Set<number>, active: boolean[], rowOf: (ji: 
   for (const ji of bounce) if (active[ji] && sign(ji) * rowOf(ji).Cdot > 1e-6) active[ji] = false;
 }
 
+// Classic RK4 on (q, v), plain loops in the textbook's arithmetic order; stage velocities double as the stage dq.
 function rk4(m: Mechanism, s: State, active: boolean[], prev: number[][], dt: number, a1In?: Float64Array): State {
   const n = s.q.length;
   const h = dt / 2;
@@ -437,8 +436,8 @@ export function simulate(
     }
     const before = s;
     s = rk4(m, s, active, prev, dt, a1);
-    // re-contact: an open contact closing with approaching velocity becomes active with an inelastic impact
-    // ponytail: no restitution (stones and counterweights thud, they don't bounce); add e·Cdot if it matters
+    // re-contact: an open contact closing with approaching velocity becomes active with an impact (inelastic unless
+    // m.restitution is set; then pushing contacts may rebound, see bounceRow)
     // a spiked foot that let go (lifted, or dropped by an impact) stays a plain ground contact: the part may land on
     // the floor again but never sinks through it (no re-plant: the spikes' no-slip grip is gone)
     m.joints.forEach((j, ji) => {

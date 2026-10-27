@@ -3,7 +3,8 @@
 //   rupture: mean values (wood at its rupture, metal at yield, rope at its breaking load), loads as simulated.
 //   design: loads × 1.4; wood per NBR 7190:1997 (k_mod = 1.1·1.0·0.8 = 0.88 instantaneous load, dry, 2nd grade;
 //     f_k = 0.7·f_m, γ_w = 1.4; shear f_vk = 0.54·f_vm, γ_v = 1.8; bending held to the compressed fiber's f_c0,d;
-//     tension f_t0 = f_c0/0.77), steel per NBR 8800 (γ_a1 = 1.10), ropes at a fifth of the breaking load.
+//     tension f_t0 = f_c0/0.77), steel per NBR 8800 (γ_a1 = 1.10), ropes at a fifth of the breaking load
+//     (a working-load factor of 5 that stands in for the 1.4: rope tension is not multiplied).
 import { point } from './physics/constraints';
 import type { Cam, Mechanism, Vec } from './physics/model';
 import type { Result } from './physics/solver';
@@ -45,7 +46,7 @@ export interface Assessment { checks: Check[]; failure?: Check & { fail: NonNull
 const MPa = (s: number) => `${(s / 1e6).toFixed(1).replace('.', ',')} MPa`;
 const kN = (f: number) => `${(f / 1000).toFixed(2).replace('.', ',')} kN`;
 
-// spec: the card's material / section per part id ('arm', 'axle', 'frame', 'hanger', 'sling', 'string', 'cam', 'leg')
+// spec: the card's material / section per part id ('arm', 'axle', 'frame', 'hanger', 'sling', 'string', 'cam', 'leg', 'tower')
 export function assess(m: Mechanism, r: Result, spec: Record<string, PartSpec>, mode: Mode): Assessment {
   const checks = new Map<string, Check>();
   const g = loadFactor(mode);
@@ -159,7 +160,7 @@ export function assess(m: Mechanism, r: Result, spec: Record<string, PartSpec>, 
       note('tower', `j:${camI}`, 'Torre da polia: flambagem (engastada)', P / Pcr, S.t, () => `${kN(P)} contra a carga de Euler ${kN(Pcr)}`);
     }
 
-    // ropes: tension vs breaking load (design: a fifth of it)
+    // ropes: tension vs breaking load (design: a fifth of it, tension not × 1.4)
     for (const [id, ji] of ropes) {
       const T = Math.hypot(...S.F[ji]);
       if (!T) continue;

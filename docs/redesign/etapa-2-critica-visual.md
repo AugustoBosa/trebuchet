@@ -18,7 +18,7 @@ Data: 2026-10-23 · Modo: **Operate** (o usuário está numa tarefa: projetar, d
 ## O que fica
 
 - O desenho da máquina no canvas: traço limpo, fundo vazio. É o melhor elemento da página.
-- As cores das séries dos gráficos (validadas para daltonismo em 2026-10-16).
+- As cores das séries dos gráficos (validadas para daltonismo em 2026-10-15).
 - Os textos: técnicos, em pt-BR, explicam o porquê. A crítica é de forma, não de conteúdo.
 - Tema claro e escuro pelo sistema.
 

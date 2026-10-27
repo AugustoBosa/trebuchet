@@ -3,7 +3,7 @@
 import { jointRows } from './physics/constraints';
 import type { Body, Joint, Mechanism, Vec } from './physics/model';
 import { initialState, startsActive } from './physics/solver';
-import { world } from './render';
+import { segDist, world } from './render';
 import { sanitizeSpec, type PartSpec } from './parts';
 
 export type Role = 'projectile' | 'counterweight';
@@ -44,12 +44,6 @@ const sub = (a: Vec, b: Vec): Vec => [a[0] - b[0], a[1] - b[1]];
 const dist = (a: Vec, b: Vec) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 const ON_GROUND = 0.02; // m: a projectile this close to the ground rests in the trough
 const ATTACH_TOL = 0.02; // m: how far a joint point may sit from the body it connects
-
-export function segDist(p: Vec, a: Vec, b: Vec) {
-  const ab = sub(b, a);
-  const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * ab[0] + (p[1] - a[1]) * ab[1]) / (ab[0] ** 2 + ab[1] ** 2 || 1)));
-  return dist(p, [a[0] + t * ab[0], a[1] + t * ab[1]]);
-}
 
 // [world point, body] pairs a joint connects
 export function attachments(j: SJoint): [Vec, number | 'ground'][] {
@@ -309,7 +303,7 @@ export function sanitizeSketch(raw: unknown): Sketch {
       const b = ref(j.b);
       if (b === -1) continue;
       const tilt = j.kind === 'pin' ? Object.fromEntries((['pitch', 'yaw'] as const).flatMap((k) => (num(j[k], 0) ? [[k, Math.max(-45, Math.min(45, num(j[k], 0)))]] : []))) : {};
-      sk.joints.push({ kind: j.kind, at: vec(j.at), a, b, ...(j.kind === 'pin' && j.mu ? { mu: num(j.mu, 0), radius: pos(j.radius, 0.05) } : {}), ...tilt });
+      sk.joints.push({ kind: j.kind, at: vec(j.at), a, b, ...(j.kind === 'pin' && j.mu ? { mu: Math.max(0, num(j.mu, 0)), radius: pos(j.radius, 0.05) } : {}), ...tilt });
     } else if (j.kind === 'rope') {
       const b = ref(j.b);
       if (b !== -1) sk.joints.push({ kind: 'rope', a, pa: vec(j.pa), b, pb: vec(j.pb) });

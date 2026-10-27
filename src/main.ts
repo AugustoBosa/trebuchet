@@ -164,7 +164,7 @@ function stats(r: Result, m: Mechanism, lateral?: number, broke?: boolean) {
   $('stats').innerHTML = keyItems.map(cell(' key')).join('') + items.map(cell('')).join('');
 }
 
-const PART_NAME: Record<string, string> = { arm: 'Braço', axle: 'Eixo', frame: 'Pórtico', hanger: 'Haste do contrapeso', sling: 'Funda', string: 'Corda', cam: 'Corda do contrapeso', leg: 'Perna' };
+const PART_NAME: Record<string, string> = { arm: 'Braço', axle: 'Eixo', frame: 'Pórtico', hanger: 'Haste do contrapeso', sling: 'Funda', string: 'Corda', cam: 'Corda do contrapeso', leg: 'Perna', tower: 'Torre da polia' };
 // every checked part: its critical check and safety factor under both criteria, side by side
 function structureTable(a: Checks | undefined) {
   if (!a) return '';
@@ -184,7 +184,7 @@ function physicsPanel(r: Result, m: Mechanism, checks?: Checks) {
   const ideal = (2 * r.inputEnergy) / (mp * G);
   const ratios: string[] = [];
   if (m.counterweight !== undefined) ratios.push(`razão de massas M/m = <b>${br(m.bodies[m.counterweight].mass / mp, 0)}</b>`);
-  if (!isFree()) ratios.push(`razão de braços L₁/L₂ = <b>${br(params.longArm / params.shortArm, 2)}</b>`);
+  if (!isFree() && kindSel.value !== 'fiffer') ratios.push(`razão de braços L₁/L₂ = <b>${br(params.longArm / params.shortArm, 2)}</b>`);
   $('physics').innerHTML = `
     <h2>Para onde foi a energia</h2>
     <ul>
@@ -475,9 +475,11 @@ function walkingHandles(m: Mechanism): Handle[] {
 
 function handles(m: Mechanism): Handle[] {
   if (kindSel.value === 'walking') return walkingHandles(m);
+  if (kindSel.value === 'fiffer') return []; // fixed geometry (buildFiffer ignores the arm and axle params)
   const g = geometry(params, kindSel.value as Kind);
+  const lift = kindSel.value === 'f2k' ? params.axleLift : 0; // the F2K's axle sits axleLift above pivotHeight
   const h: Handle[] = [
-    { label: 'eixo', pos: g.pivot, apply: (p) => (params.pivotHeight = clamp(p[1], 'pivotHeight')) },
+    { label: 'eixo', pos: g.pivot, apply: (p) => (params.pivotHeight = clamp(p[1] - lift, 'pivotHeight')) },
     { label: 'braço longo', pos: g.tip, apply: (p) => (params.longArm = clamp(dist(p, g.pivot), 'longArm')) },
     { label: 'braço curto', pos: g.shortTip, apply: (p) => (params.shortArm = clamp(dist(p, g.pivot), 'shortArm')) },
     { label: 'funda', pos: m.bodies[m.projectile].pos, apply: (p) => (params.slingLength = clamp(dist(p, g.tip), 'slingLength')) },

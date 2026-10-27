@@ -2,6 +2,13 @@
 
 Aprovado em 2026-10-18. Estende a ficha de peça (`src/parts.ts`, commit 9049b3a).
 
+> **Spec histórica.** O código divergiu em alguns pontos (o `CHANGELOG.md` registra cada um):
+> - são 24 espécies do IPT, não 25 (27 madeiras ao todo, com as 3 de CIRAD/EN 408);
+> - o embutimento em metal usa 2,4·fu da NBR 8800 (÷ 1,35 em projeto), não 1,5·fy;
+> - não há tubo de alumínio nas bitolas; entraram pilar e barra redonda;
+> - a flexão lateral no 3D e a torre da polia do MURLIN foram feitas em 2026-10-22;
+> - o alcance de uma máquina que quebrou aparece como "0,0 m" com a marca "quebrou".
+
 ## Objetivo
 - Escolher material e seção de cada peça, com uma lista de materiais disponíveis no Brasil.
 - Peças que passam da resistência **quebram**: a animação para no instante da falha, a peça fica vermelha e o alcance vale 0.

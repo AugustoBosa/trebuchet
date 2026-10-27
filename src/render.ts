@@ -156,7 +156,7 @@ function jointPoint(m: Mechanism, q: Float64Array, j: Mechanism['joints'][number
   return world(q, j.a, j.pa);
 }
 
-const segDist = (p: Vec, a: Vec, b: Vec) => {
+export const segDist = (p: Vec, a: Vec, b: Vec) => {
   const ab: Vec = [b[0] - a[0], b[1] - a[1]];
   const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * ab[0] + (p[1] - a[1]) * ab[1]) / (ab[0] ** 2 + ab[1] ** 2 || 1)));
   return Math.hypot(p[0] - a[0] - t * ab[0], p[1] - a[1] - t * ab[1]);

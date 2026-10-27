@@ -1,8 +1,8 @@
 // Free editor: tools on the machine canvas + property panel for the selection.
 import { css, cssHeight, fitCanvas, FONT } from './charts';
 import type { Vec } from './physics/model';
-import { painter, view, type Bounds, type View } from './render';
-import { allPoints, analyze, attachments, camDir, compile, detachedJoints, removeBody, segDist, type Role, type SBody, type SJoint, type Sketch } from './sketch';
+import { painter, segDist, view, type Bounds, type View } from './render';
+import { allPoints, analyze, attachments, camDir, compile, detachedJoints, removeBody, type SBody, type Sketch } from './sketch';
 
 export type Tool = 'select' | 'rod' | 'disk' | 'projectile' | 'cw' | 'pin' | 'weld' | 'rope' | 'hslider' | 'vslider' | 'pull' | 'foot' | 'spike' | 'roller' | 'floor' | 'spring' | 'cam';
 export const TOOLS: [Tool, string, string][] = [
@@ -150,8 +150,8 @@ export function createEditor(o: {
     g.setLineDash([]);
     sk.joints.forEach((j, i) => {
       if (j.kind === 'pull') { // crew rope: dashed line down to the ground, ends at the stroke limit
-        line(j.at, [j.at[0], 0], isSel('joint', i) ? accent : css('--accent'), 2, [3, 4]);
-        line([j.at[0] - 0.15, Math.max(0, j.at[1] - j.stroke)], [j.at[0] + 0.15, Math.max(0, j.at[1] - j.stroke)], css('--accent'), 2);
+        line(j.at, [j.at[0], 0], accent, 2, [3, 4]);
+        line([j.at[0] - 0.15, Math.max(0, j.at[1] - j.stroke)], [j.at[0] + 0.15, Math.max(0, j.at[1] - j.stroke)], accent, 2);
         return;
       }
       if (j.kind === 'rope' || j.kind === 'slider' || j.kind === 'floor') return;
@@ -159,11 +159,7 @@ export function createEditor(o: {
       g.strokeStyle = isSel('joint', i) ? accent : ink;
       g.fillStyle = css('--bg');
       g.lineWidth = 2;
-      if (j.kind === 'foot') { // spiked foot: three spikes into the ground
-        for (const dx of [-6, 0, 6]) { g.beginPath(); g.moveTo(x + dx - 3, y); g.lineTo(x + dx, y + 7); g.lineTo(x + dx + 3, y); g.stroke(); }
-        return;
-      }
-      if (j.kind === 'spike') { // spikes in the air, pointing down
+      if (j.kind === 'foot' || j.kind === 'spike') { // three spikes pointing down (foot: into the ground; spike: still in the air)
         for (const dx of [-6, 0, 6]) { g.beginPath(); g.moveTo(x + dx - 3, y); g.lineTo(x + dx, y + 7); g.lineTo(x + dx + 3, y); g.stroke(); }
         return;
       }
@@ -403,7 +399,7 @@ export function createEditor(o: {
   function renderPanel() {
     let html = '';
     if (sel) html += `<button type="button" class="ghost" data-act="delete">Apagar seleção</button>`;
-    html += `<h2>Disparo</h2>` + field('Ângulo de liberação (°)', 'g.releaseDeg', sk.releaseDeg) + field('Densidade do ar', 'g.airDensity', sk.airDensity) +
+    html += `<h2>Disparo</h2>` + field('Ângulo de liberação (°)', 'g.releaseDeg', sk.releaseDeg) + field('Densidade do ar (kg/m³)', 'g.airDensity', sk.airDensity) +
       field('Coef. de arrasto Cd', 'g.dragCd', sk.dragCd) + field('Atrito na calha μ', 'g.troughMu', sk.troughMu) +
       field('Massa da funda: bolsa + cordas (kg)', 'g.slingMass', sk.slingMass ?? 0) +
       field('Restituição dos impactos (e)', 'g.restitution', sk.restitution ?? 0);
